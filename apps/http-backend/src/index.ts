@@ -122,34 +122,97 @@ app.post("/room", middleware, async (req, res) => {
 });
 
 app.get("/chats/:roomId", async (req, res) => {
-  const roomId = Number(req.params.roomId);
-  const messages = await prismaClient.chat.findMany({
-    where: {
-      roomId: roomId,
-    },
-    orderBy: {
-      id: "desc",
-    },
-    take: 50,
-  });
+  const roomIdParam = req.params.roomId;
 
-  res.json({
-    messages,
-  });
+  try {
+    let room;
+
+    // Try to find room by slug first (for string identifiers like "demo")
+    room = await prismaClient.room.findFirst({
+      where: {
+        slug: roomIdParam,
+      },
+    });
+
+    // If not found and roomIdParam is numeric, try by ID
+    if (!room && !isNaN(Number(roomIdParam))) {
+      const roomId = Number(roomIdParam);
+      room = await prismaClient.room.findFirst({
+        where: {
+          id: roomId,
+        },
+      });
+    }
+
+    // If room doesn't exist, return empty messages
+    if (!room) {
+      return res.json({
+        messages: [],
+      });
+    }
+
+    const messages = await prismaClient.chat.findMany({
+      where: {
+        roomId: room.id,
+      },
+      orderBy: {
+        id: "desc",
+      },
+      take: 50,
+    });
+
+    res.json({
+      messages,
+    });
+  } catch (e) {
+    console.error("Error fetching chats:", e);
+    res.status(500).json({
+      message: "Error fetching chats",
+    });
+  }
 });
 
-// return the roomId by the slug
+// return the roomId by the slug or create if doesn't exist
 app.get("/room/:slug", async (req, res) => {
   const slug = req.params.slug;
-  const room = await prismaClient.room.findFirst({
-    where: {
-      slug,
-    },
-  });
 
-  res.json({
-    room,
-  });
+  try {
+    let room = await prismaClient.room.findFirst({
+      where: {
+        slug,
+      },
+    });
+
+    // If room doesn't exist, create it with a default admin
+    // In production, you'd want proper admin assignment
+    if (!room) {
+      // For demo purposes, we'll need a default user
+      // You should handle this better in production
+      const defaultUser = await prismaClient.user.findFirst();
+
+      if (defaultUser) {
+        room = await prismaClient.room.create({
+          data: {
+            slug,
+            adminId: defaultUser.id,
+          },
+        });
+      } else {
+        return res.status(404).json({
+          message: "No users exist. Please sign up first.",
+        });
+      }
+    }
+
+    res.json({
+      room,
+    });
+  } catch (e) {
+    console.error("Error with room:", e);
+    res.status(500).json({
+      message: "Error fetching or creating room",
+    });
+  }
 });
 
 app.listen(PORT, () => {

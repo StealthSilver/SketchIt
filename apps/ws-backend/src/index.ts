@@ -77,29 +77,51 @@ wss.on("connection", function connection(ws, request) {
     console.log(parsedData);
 
     if (parsedData.type === "chat") {
-      const roomId = parsedData.roomId;
+      const roomSlug = parsedData.roomId;
       const message = parsedData.message;
 
-      // create a queue, to save time
-      await prismaClient.chat.create({
-        data: {
-          roomId: Number(roomId),
-          message,
-          userId,
-        },
-      });
+      try {
+        // First, find the room by slug
+        let room = await prismaClient.room.findFirst({
+          where: {
+            slug: roomSlug,
+          },
+        });
 
-      users.forEach((user) => {
-        if (user.rooms.includes(roomId)) {
-          user.ws.send(
-            JSON.stringify({
-              type: "chat",
-              message: message,
-              roomId,
-            })
-          );
+        // If room doesn't exist, create it
+        if (!room) {
+          room = await prismaClient.room.create({
+            data: {
+              slug: roomSlug,
+              adminId: userId,
+            },
+          });
         }
-      });
+
+        // Create the chat message
+        await prismaClient.chat.create({
+          data: {
+            roomId: room.id,
+            message,
+            userId,
+          },
+        });
+
+        // Broadcast to all users in the room
+        users.forEach((user) => {
+          if (user.rooms.includes(roomSlug)) {
+            user.ws.send(
+              JSON.stringify({
+                type: "chat",
+                message: message,
+                roomId: roomSlug,
+              })
+            );
+          }
+        });
+      } catch (e) {
+        console.error("Error saving chat:", e);
+      }
     }
   });
 });
