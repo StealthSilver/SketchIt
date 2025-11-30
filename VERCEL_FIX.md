@@ -7,11 +7,14 @@ The error `ERR_INVALID_THIS` occurs due to pnpm lockfile version incompatibility
 ## ✅ Fixes Applied
 
 ### 1. Updated Package Manager Version
+
 - Changed from `pnpm@9.0.0` to `pnpm@8.15.6` (more stable for Vercel)
 - Updated `package.json` with engine specifications
 
 ### 2. Added .npmrc Configuration
+
 Created `.npmrc` with Vercel-friendly settings:
+
 ```
 auto-install-peers=true
 strict-peer-dependencies=false
@@ -19,9 +22,11 @@ shamefully-hoist=true
 ```
 
 ### 3. Updated vercel.json
+
 Added `--no-frozen-lockfile` flag to allow lockfile regeneration on Vercel
 
 ### 4. Regenerated Lockfile
+
 - Removed old `pnpm-lock.yaml`
 - Regenerated with compatible pnpm version
 - Tested build successfully ✅
@@ -33,6 +38,7 @@ Added `--no-frozen-lockfile` flag to allow lockfile regeneration on Vercel
 ### Method 1: Automatic Deployment (Recommended)
 
 1. **Commit and push the changes:**
+
    ```bash
    git add .
    git commit -m "Fix Vercel deployment with pnpm compatibility"
@@ -48,16 +54,17 @@ If the build still fails, configure Vercel manually:
 
 **In Vercel Dashboard → Project Settings → General:**
 
-| Setting | Value |
-|---------|-------|
-| Framework Preset | Next.js |
-| Root Directory | `apps/frontend` |
-| Build Command | `cd ../.. && pnpm install --no-frozen-lockfile && pnpm run build --filter=frontend` |
-| Output Directory | `.next` |
-| Install Command | `pnpm install --no-frozen-lockfile` |
-| Node Version | 18.x or 20.x |
+| Setting          | Value                                                                               |
+| ---------------- | ----------------------------------------------------------------------------------- |
+| Framework Preset | Next.js                                                                             |
+| Root Directory   | `apps/frontend`                                                                     |
+| Build Command    | `cd ../.. && pnpm install --no-frozen-lockfile && pnpm run build --filter=frontend` |
+| Output Directory | `.next`                                                                             |
+| Install Command  | `pnpm install --no-frozen-lockfile`                                                 |
+| Node Version     | 18.x or 20.x                                                                        |
 
 **Environment Variables:**
+
 ```
 NEXT_PUBLIC_HTTP_BACKEND_URL=https://your-backend.railway.app
 NEXT_PUBLIC_WS_URL=wss://your-ws.railway.app
@@ -72,12 +79,14 @@ If pnpm continues to cause issues, you can switch to npm:
 ### Option A: Convert to npm
 
 1. **Remove pnpm files:**
+
    ```bash
    rm -rf pnpm-lock.yaml node_modules .pnpm-store
    rm pnpm-workspace.yaml
    ```
 
 2. **Update package.json:**
+
    ```json
    {
      "packageManager": "npm@10.0.0"
@@ -85,6 +94,7 @@ If pnpm continues to cause issues, you can switch to npm:
    ```
 
 3. **Create package-lock.json:**
+
    ```bash
    npm install
    ```
@@ -100,6 +110,7 @@ If pnpm continues to cause issues, you can switch to npm:
 ### Option B: Use Turborepo's Remote Caching
 
 1. **Update vercel.json:**
+
    ```json
    {
      "buildCommand": "npx turbo build --filter=frontend"
@@ -152,6 +163,7 @@ git push origin main
 ### If Build Still Fails with pnpm
 
 **Error: "lockfile is broken"**
+
 ```bash
 # Locally:
 rm -rf node_modules pnpm-lock.yaml .pnpm-store
@@ -162,12 +174,14 @@ git push
 ```
 
 **Error: "Cannot find module"**
+
 - Check that all dependencies are in the correct `package.json`
 - Ensure workspace protocol is used: `"@repo/ui": "workspace:*"`
 
 ### If Build Succeeds but App Doesn't Work
 
 **Check these:**
+
 1. ✅ Environment variables are set in Vercel
 2. ✅ Backend URLs use `https://` and `wss://`
 3. ✅ Backend services are running
@@ -178,6 +192,7 @@ git push
 ## 🎯 Quick Fix Summary
 
 **Changes made:**
+
 1. ✅ Updated `package.json` - pnpm version downgrade
 2. ✅ Created/Updated `.npmrc` - hoisting configuration
 3. ✅ Updated `vercel.json` - no-frozen-lockfile flag
