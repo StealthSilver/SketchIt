@@ -1,0 +1,176 @@
+Excelidraw is a colloborative canvas app wher you can create diagrams with the help of the tools that are provided.
+
+Stpes for the project 
+
+1. npm install -g pnpm 
+pnpm is another package manager like npm, bun, yarn. 
+
+pnpm is better than npm.
+facebook intoduced yarn for getting rid of central dependencies as the node modules take too much space.
+
+2. initialize a new turborepo (monorepo)
+npx create-turbo@latest
+use pnpm as package manager
+
+3. go in the draw-app directory and run 
+a. pnpm install 
+b. pnpm run dev
+
+4. as for excelidraw we just need a single frontend, delete the docs frontend and keep the web one
+
+IDEAL WAY (test driven development): first write the tests -> then write the backend -> then write the frontend 
+
+5. create two backend repos. http-server, ws-backend
+
+the tests are written in packages
+this is the boiler plate for the application
+
+6. initialize the package.json in both the backends
+npm init -y
+
+7. initialize the tsconfig, there is already a base typescript config in the packages, extend it in the backends
+add the base typscript config in both the backends
+
+for npm use *, for pnpm use workspace:*
+add the dependency in for the ts-config in the package.json
+* better to add as a devDependency as it is only required with the dev time
+
+8. go to the root folder and do a pnpm install again
+
+9. adding a build, dev and start script to both the projects
+"build": "tsc -b", -> building the project int eh CI/CD pipeline
+"dev": "npm run build && npm run start", -> for local developemnt
+"start": "node ./dist/index.js" -> starting the application on the server
+
+10. add the compiler options in tsconfigs of both backends 
+"compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist"
+  }
+
+11. create the src/index.ts in the http backend
+12. create the src/index.ts in the ws backend
+13. install the dependencies 
+pnpm add express @types/express
+pnpm add ws @types/ws
+
+write the boiler plate for both the servers
+
+wss
+import { WebSocketServer } from "ws";
+
+const wss  = new WebSocketServer({port: 8080});
+
+wss.on('connection', function connection(ws) {
+    ws.on('error', console.error);
+
+    ws.on('message', function message(data){
+        ws.send('pong')
+    });
+
+    
+})
+
+** CREATING A CLI FOR THE INITIALIZING A MONOREPO WITH ALL THE BOILERPLATE UNTIL HERE
+
+14. writing the signup, signin and create-room endpoints
+pnpm add jsonwebtoken @types/jsonwebtoken
+
+15. creating the middleare and gating hte room endpoint withe the middleware 
+16. using the url and the jwt to check the user in the ws-backend 
+17. getting the jwt_secret in a common place
+
+18. create the backend-common in packages
+create the package.json and the tsconfig.json 
+
+add the extends in tsconfig and name teh package @repo/common 
+also add the tsconfig as the dev dependency 
+
+then in the src/config add the JWT_SECRET and also use the env variable 
+for the process.env install pnpm add @types/node
+
+create the  
+ "exports": {
+    "./config": "./src/index.ts"
+  }, in package.json 
+
+  import in both the backends
+
+19. now create the zod validations in the common folder in packages so that it can be used by the both fronend and the backend 
+
+20. create the db package 
+create a new package db 
+a. pnpm install prisma 
+b. npx prisma init 
+
+create the user, char, room schema
+get a db url from local of from cloud , paste in the .env file
+
+npx prisma migrate dev --name init_schema -> to migrate the db (slower on a cloud db)
+npx prisma generate -> generating the prisma client
+
+export prismaclient from the index.ts
+
+21. using the db package in the http layer
+postgres  + prisma
+
+complete the http backend 
+
+import the db package in the package.json and as a dependency not a adevDependency as it will be used at the runtime
+
+use the bcrypt library for the hashed passwords 
+
+22. the chat room logic begins, in the ws-backend
+
+room management, broadcast messages
+
+state management on the backend
+
+most backends we have created until now was stateless, there was no need to store any state. all the comminication was done with the db.
+in this ws backend we have to manage the state. there needs to be a global variable for every user. this backend is statefull
+
+there are ways, redux for backend state management, singletons, global variable
+
+the state is all the users that connect and all the rooms. using hte global variable.
+
+const users = [
+  {
+    userId: 1,
+    rooms: ["room1", "room2"],
+    ws: socket,
+  },
+  {
+    userId: 1,
+    rooms: ["room1", "room2"],
+    ws: socket,
+  },
+  {
+    userId: 1,
+    rooms: ["room1", "room2"],
+    ws: socket,
+  },
+];
+
+backend complete
+todos: authenticate all the necessary endpoints. use a queue for the db storage, rate limit the messages
+
+get a quick landing page from lovable or bolt and add that to the page.tsx 
+
+
+
+
+-----------
+
+to run locally a remote turborepo
+
+1. clone the repo 
+2. run pnpm install globally 
+3. start the db locally or on cloud
+4. create a fresh .env in db and fill the db credentials 
+5. migrate teh db (npx prisma migrate dev)
+6. generate the prisma client 
+7. start the http backend 
+8. start the ws backend 
+9. start the fronend
+
+we can also locally install using docker
