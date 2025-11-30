@@ -1,4 +1,91 @@
-# Turborepo starter
+# Excelidraw
+
+A collaborative real-time drawing application built with Next.js, WebSockets, and PostgreSQL.
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+- Node.js 18+ and pnpm
+- Docker Desktop (for local database) OR PostgreSQL installed locally
+- Git
+
+### Installation
+
+1. **Clone and install dependencies:**
+
+   ```bash
+   git clone <repository-url>
+   cd Excelidraw
+   pnpm install
+   ```
+
+2. **Set up the database:**
+
+   **Option A: Using Docker (Recommended)**
+
+   ```bash
+   # Start Docker Desktop, then run:
+   ./setup-db.sh
+   ```
+
+   **Option B: Manual Setup**
+
+   ```bash
+   # Create .env file (already created, just verify)
+   # Start your database (Docker or local PostgreSQL)
+   cd packages/db
+   pnpm db:generate
+   pnpm db:migrate
+   ```
+
+3. **Start the development servers:**
+   ```bash
+   pnpm run dev
+   ```
+
+The application will be available at:
+
+- Frontend: http://localhost:3000
+- WebSocket Server: ws://localhost:8080
+
+## 📖 Documentation
+
+- [Database Setup Guide](./DATABASE_SETUP.md) - Detailed database configuration options
+- [Architecture Overview](./architecture.png) - System architecture diagram
+
+## 🛠️ Development
+
+### Project Structure
+
+```
+apps/
+  frontend/        # Next.js frontend application
+  http-backend/    # HTTP API server
+  ws-backend/      # WebSocket server for real-time communication
+packages/
+  db/              # Prisma database schema and client
+  backend-common/  # Shared backend utilities
+  common/          # Shared types and utilities
+  ui/              # Shared UI components
+```
+
+### Available Scripts
+
+- `pnpm run dev` - Start all development servers
+- `pnpm run build` - Build all packages
+- `cd packages/db && pnpm db:studio` - Open Prisma Studio (database GUI)
+- `cd packages/db && pnpm db:migrate` - Run database migrations
+
+## 📦 Technology Stack
+
+- **Frontend**: Next.js 15, React, TypeScript, Tailwind CSS
+- **Backend**: Node.js, Express, WebSocket
+- **Database**: PostgreSQL with Prisma ORM
+- **Monorepo**: Turborepo
+- **Authentication**: JWT
+
+## Turborepo starter
 
 This Turborepo starter is maintained by the Turborepo core team.
 
