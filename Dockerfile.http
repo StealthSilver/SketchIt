@@ -1,0 +1,28 @@
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Copy workspace files
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+
+# Copy apps and packages
+COPY apps/http-backend ./apps/http-backend
+COPY packages/backend-common ./packages/backend-common
+COPY packages/common ./packages/common
+COPY packages/typescript-config ./packages/typescript-config
+COPY packages/db ./packages/db
+
+# Install pnpm
+RUN npm install -g pnpm@8.15.8
+
+# Install dependencies
+RUN pnpm install --frozen-lockfile
+
+# Build
+RUN cd apps/http-backend && pnpm run build
+
+# Expose port
+EXPOSE 3001
+
+# Start the application
+CMD ["node", "apps/http-backend/dist/index.js"]
