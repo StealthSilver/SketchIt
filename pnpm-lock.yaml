@@ -118,6 +118,9 @@ importers:
       '@types/express':
         specifier: ^5.0.3
         version: 5.0.5
+      typescript:
+        specifier: ^5.3.3
+        version: 5.9.2
 
   apps/web:
     dependencies:
@@ -180,6 +183,9 @@ importers:
       '@types/ws':
         specifier: ^8.18.1
         version: 8.18.1
+      typescript:
+        specifier: ^5.3.3
+        version: 5.9.2
 
   packages/backend-common:
     dependencies:
