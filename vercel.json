@@ -5,9 +5,5 @@
       "src": "apps/frontend/package.json",
       "use": "@vercel/next"
     }
-  ],
-  "env": {
-    "NEXT_PUBLIC_HTTP_BACKEND_URL": "@http_backend_url",
-    "NEXT_PUBLIC_WS_URL": "@ws_url"
-  }
+  ]
 }
