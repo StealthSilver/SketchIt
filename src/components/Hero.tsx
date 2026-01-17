@@ -12,7 +12,7 @@ export function Hero() {
         <AnimatedCanvas />
 
         {/* Gradient Overlays */}
-        <div className="absolute inset-0 bg-gradient-to-b from-background via-background/90 to-background" />
+        <div className="absolute inset-0 bg-gradient-to-b from-background/60 via-background/40 to-background/70" />
         <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/20 rounded-full blur-[120px] animate-pulse-glow" />
         <div
           className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-accent/15 rounded-full blur-[100px] animate-pulse-glow"
