@@ -3,6 +3,8 @@
 import Link from "next/link";
 import Image from "next/image";
 import { motion } from "framer-motion";
+import { ThemeToggle } from "./ThemeToggle";
+import { useTheme } from "@/context/ThemeContext";
 
 const navLinks = [
   { name: "About", href: "#about" },
@@ -13,20 +15,27 @@ const navLinks = [
 ];
 
 export function Navbar() {
+  const { theme } = useTheme();
+
   return (
     <motion.nav
       initial={{ opacity: 0, y: -20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6 }}
-      className="fixed top-0 left-0 right-0 z-50 glass border-b border-white/10"
-      style={{ backgroundColor: "rgba(10, 10, 10, 0.8)" }}
+      className="fixed top-0 left-0 right-0 z-50 glass transition-colors duration-300"
+      style={{
+        backgroundColor: theme === "dark" ? "rgba(10, 10, 10, 0.8)" : "rgba(255, 255, 255, 0.8)",
+        borderBottom: `1px solid ${theme === "dark" ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.1)"}`
+      }}
     >
       <div className="max-w-7xl mx-auto px-6 lg:px-12">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <Link href="/" className="flex items-center">
             <Image
-              src="/sketchit-dark.svg"
+              src={
+                theme === "dark" ? "/sketchit-dark.svg" : "/sketchit-light.svg"
+              }
               alt="SketchIt Logo"
               width={140}
               height={32}
@@ -51,10 +60,16 @@ export function Navbar() {
             ))}
           </div>
 
-          {/* Get Started Button */}
-          <Link href="/get-started" className="btn-primary text-sm px-6 py-2.5">
-            Get Started
-          </Link>
+          {/* Right Side: Theme Toggle and Get Started Button */}
+          <div className="flex items-center gap-4">
+            <ThemeToggle />
+            <Link
+              href="/get-started"
+              className="btn-primary text-sm px-6 py-2.5"
+            >
+              Get Started
+            </Link>
+          </div>
         </div>
       </div>
     </motion.nav>
