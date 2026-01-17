@@ -18,7 +18,7 @@ export function Navbar() {
       initial={{ opacity: 0, y: -20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6 }}
-      className="fixed top-0 left-0 right-0 z-50 border-b border-white/10 backdrop-blur-md"
+      className="fixed top-0 left-0 right-0 z-50 glass border-b border-white/10"
       style={{ backgroundColor: "rgba(10, 10, 10, 0.8)" }}
     >
       <div className="max-w-7xl mx-auto px-6 lg:px-12">
@@ -41,21 +41,18 @@ export function Navbar() {
               <Link
                 key={link.name}
                 href={link.href}
-                className="text-white/80 hover:text-white transition-colors text-sm font-medium"
+                className="text-muted-foreground hover:text-foreground transition-all duration-300 text-sm font-medium relative group"
                 target={link.name === "GitHub" ? "_blank" : undefined}
                 rel={link.name === "GitHub" ? "noopener noreferrer" : undefined}
               >
                 {link.name}
+                <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-accent transition-all duration-300 group-hover:w-full" />
               </Link>
             ))}
           </div>
 
           {/* Get Started Button */}
-          <Link
-            href="/get-started"
-            className="px-5 py-2 rounded-full text-sm font-medium transition-all hover:transform hover:translate-y-[-2px] hover:shadow-[0_10px_25px_rgba(177,9,16,0.4)]"
-            style={{ backgroundColor: "#b10910", color: "white" }}
-          >
+          <Link href="/get-started" className="btn-primary text-sm px-6 py-2.5">
             Get Started
           </Link>
         </div>
