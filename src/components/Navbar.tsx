@@ -22,11 +22,15 @@ export function Navbar() {
       initial={{ opacity: 0, y: -20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6 }}
-      className="fixed top-0 left-0 right-0 z-50 glass transition-colors duration-300"
+      className="fixed top-0 left-0 right-0 z-50 transition-colors duration-300 backdrop-blur-xl"
       style={{
         backgroundColor:
-          theme === "dark" ? "rgba(1, 8, 18, 0.8)" : "rgba(255, 255, 255, 0.8)",
-        borderBottom: `1px solid ${theme === "dark" ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.1)"}`,
+          theme === "dark" ? "rgba(1, 8, 18, 0.2)" : "rgba(255, 255, 255, 0.2)",
+        borderBottom: `1px solid ${theme === "dark" ? "rgba(255, 255, 255, 0.15)" : "rgba(0, 0, 0, 0.15)"}`,
+        boxShadow:
+          theme === "dark"
+            ? "0 4px 24px 0 rgba(0, 0, 0, 0.25)"
+            : "0 4px 24px 0 rgba(31, 38, 135, 0.1)",
       }}
     >
       <div className="max-w-7xl mx-auto px-6 lg:px-12">
