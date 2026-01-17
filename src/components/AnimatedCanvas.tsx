@@ -219,7 +219,7 @@ const AnimatedCanvas = () => {
 
         // Draw pixel
         ctx.beginPath();
-        const pixelSize = 3 + pixel.ripple * 3;
+        const pixelSize = 2 + pixel.ripple * 2;
         ctx.arc(pixel.x, pixel.y, pixelSize, 0, Math.PI * 2);
         ctx.fillStyle = pixel.ripple > 0.1 ? colors.pixelActive : colors.pixel;
         ctx.globalAlpha = Math.min(finalOpacity, 1);
