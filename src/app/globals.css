@@ -3,7 +3,6 @@
 :root {
   --background: #0a0a0a;
   --foreground: #ededed;
-  --primary: #8b5cf6;
   --accent: #fbbf24;
   --muted-foreground: #a1a1aa;
   --border: #27272a;
@@ -43,7 +42,7 @@ body {
 
 /* Button Styles */
 .btn-primary {
-  background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+  background: #b10910;
   color: white;
   padding: 0.75rem 2rem;
   border-radius: 9999px;
@@ -55,7 +54,8 @@ body {
 
 .btn-primary:hover {
   transform: translateY(-2px);
-  box-shadow: 0 10px 25px rgba(139, 92, 246, 0.3);
+  box-shadow: 0 10px 25px rgba(177, 9, 16, 0.4);
+  background: #d00a12;
 }
 
 .btn-secondary {

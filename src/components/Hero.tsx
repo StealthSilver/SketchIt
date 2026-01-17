@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Play, Sparkles } from "lucide-react";
+import { Play, Sparkles, Pencil } from "lucide-react";
 import AnimatedCanvas from "./AnimatedCanvas";
 
 export function Hero() {
@@ -72,7 +72,7 @@ export function Hero() {
               whileTap={{ scale: 0.98 }}
               className="btn-primary flex items-center gap-2 text-lg px-8 py-4"
             >
-              <Sparkles className="w-5 h-5" />
+              <Pencil className="w-5 h-5" />
               Start Sketching
             </motion.button>
 

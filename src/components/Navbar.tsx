@@ -53,7 +53,8 @@ export function Navbar() {
           {/* Get Started Button */}
           <Link
             href="/get-started"
-            className="bg-white text-[#070612] px-5 py-2 rounded-full text-sm font-medium hover:bg-white/90 transition-colors"
+            className="px-5 py-2 rounded-full text-sm font-medium transition-all hover:transform hover:translate-y-[-2px] hover:shadow-[0_10px_25px_rgba(177,9,16,0.4)]"
+            style={{ backgroundColor: "#b10910", color: "white" }}
           >
             Get Started
           </Link>
