@@ -1,3 +1,0 @@
-# Vercel will read this file to determine which pnpm version to use
-# This ensures Vercel uses pnpm 8.15.6 instead of the default 6.x
-ENABLE_EXPERIMENTAL_COREPACK=1
