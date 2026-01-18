@@ -22,7 +22,7 @@ export function Navbar() {
       initial={{ opacity: 0, y: -20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6 }}
-      className="fixed top-0 left-0 right-0 z-50 transition-colors duration-300 backdrop-blur-xl"
+      className="fixed top-0 left-0 right-0 z-50 transition-colors duration-300 backdrop-blur-2xl"
       style={{
         backgroundColor:
           theme === "dark" ? "rgba(1, 8, 18, 0.2)" : "rgba(255, 255, 255, 0.2)",

@@ -43,9 +43,9 @@ export function Hero() {
             transition={{ duration: 0.8, delay: 0.1 }}
             className="font-display text-5xl sm:text-6xl lg:text-7xl font-bold leading-tight mb-6"
           >
-            <span className="text-foreground">Think. Speak.</span>
+            <span className="text-foreground">Think. Sketch.</span>
             <br />
-            <span className="gradient-text-gold">Sketch.</span>
+            <span className="gradient-text-gold">Create.</span>
           </motion.h1>
 
           {/* Subheadline */}
