@@ -1005,14 +1005,11 @@ export function InfiniteCanvas() {
             pointerEvents: "auto",
           }}
         >
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-            <path d="M12 2L2 7l10 5 10-5-10-5z" fill="#fbbf24" />
-            <path d="M2 17l10 5 10-5" fill="#f59e0b" opacity="0.7" />
-            <path d="M2 12l10 5 10-5" fill="#d97706" opacity="0.5" />
-          </svg>
-          <span className="font-bold text-lg" style={{ color: "#fbbf24" }}>
-            SketchIt
-          </span>
+          <img
+            src="/sketchit-dark.svg"
+            alt="SketchIt Logo"
+            className="h-7 w-auto"
+          />
         </div>
 
         {/* Action Buttons */}
