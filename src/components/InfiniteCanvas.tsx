@@ -48,6 +48,163 @@ export function InfiniteCanvas() {
     [scale, offset],
   );
 
+  // Check if eraser intersects with a shape
+  const eraserIntersectsShape = useCallback(
+    (line: DrawingLine, eraserPoint: Point, eraserRadius: number) => {
+      const shape = line.shape || "pen";
+
+      if (shape === "pen") {
+        // For pen, check if any point is within eraser radius
+        return line.points.some(
+          (p) =>
+            Math.sqrt(
+              Math.pow(p.x - eraserPoint.x, 2) +
+                Math.pow(p.y - eraserPoint.y, 2),
+            ) < eraserRadius,
+        );
+      }
+
+      if (line.points.length < 2) return false;
+      const start = line.points[0];
+      const end = line.points[line.points.length - 1];
+
+      if (shape === "line") {
+        // Check distance from point to line segment
+        const A = eraserPoint.x - start.x;
+        const B = eraserPoint.y - start.y;
+        const C = end.x - start.x;
+        const D = end.y - start.y;
+        const dot = A * C + B * D;
+        const lenSq = C * C + D * D;
+        let param = -1;
+        if (lenSq !== 0) param = dot / lenSq;
+        let xx, yy;
+        if (param < 0) {
+          xx = start.x;
+          yy = start.y;
+        } else if (param > 1) {
+          xx = end.x;
+          yy = end.y;
+        } else {
+          xx = start.x + param * C;
+          yy = start.y + param * D;
+        }
+        const dx = eraserPoint.x - xx;
+        const dy = eraserPoint.y - yy;
+        return Math.sqrt(dx * dx + dy * dy) < eraserRadius;
+      }
+
+      if (shape === "square") {
+        // Check if eraser intersects with rectangle edges
+        const minX = Math.min(start.x, end.x);
+        const maxX = Math.max(start.x, end.x);
+        const minY = Math.min(start.y, end.y);
+        const maxY = Math.max(start.y, end.y);
+        // Check if point is near any edge
+        const nearLeft =
+          Math.abs(eraserPoint.x - minX) < eraserRadius &&
+          eraserPoint.y >= minY - eraserRadius &&
+          eraserPoint.y <= maxY + eraserRadius;
+        const nearRight =
+          Math.abs(eraserPoint.x - maxX) < eraserRadius &&
+          eraserPoint.y >= minY - eraserRadius &&
+          eraserPoint.y <= maxY + eraserRadius;
+        const nearTop =
+          Math.abs(eraserPoint.y - minY) < eraserRadius &&
+          eraserPoint.x >= minX - eraserRadius &&
+          eraserPoint.x <= maxX + eraserRadius;
+        const nearBottom =
+          Math.abs(eraserPoint.y - maxY) < eraserRadius &&
+          eraserPoint.x >= minX - eraserRadius &&
+          eraserPoint.x <= maxX + eraserRadius;
+        return nearLeft || nearRight || nearTop || nearBottom;
+      }
+
+      if (shape === "circle") {
+        // Check if eraser intersects with circle
+        const radius = Math.sqrt(
+          Math.pow(end.x - start.x, 2) + Math.pow(end.y - start.y, 2),
+        );
+        const distToCenter = Math.sqrt(
+          Math.pow(eraserPoint.x - start.x, 2) +
+            Math.pow(eraserPoint.y - start.y, 2),
+        );
+        return Math.abs(distToCenter - radius) < eraserRadius;
+      }
+
+      if (shape === "triangle") {
+        // Check if eraser intersects with triangle edges
+        const width = end.x - start.x;
+        const height = end.y - start.y;
+        const p1 = { x: start.x + width / 2, y: start.y };
+        const p2 = { x: start.x, y: start.y + height };
+        const p3 = { x: start.x + width, y: start.y + height };
+
+        // Check distance to each edge
+        const edges = [
+          [p1, p2],
+          [p2, p3],
+          [p3, p1],
+        ];
+
+        for (const [edgeStart, edgeEnd] of edges) {
+          const A = eraserPoint.x - edgeStart.x;
+          const B = eraserPoint.y - edgeStart.y;
+          const C = edgeEnd.x - edgeStart.x;
+          const D = edgeEnd.y - edgeStart.y;
+          const dot = A * C + B * D;
+          const lenSq = C * C + D * D;
+          let param = -1;
+          if (lenSq !== 0) param = dot / lenSq;
+          let xx, yy;
+          if (param < 0) {
+            xx = edgeStart.x;
+            yy = edgeStart.y;
+          } else if (param > 1) {
+            xx = edgeEnd.x;
+            yy = edgeEnd.y;
+          } else {
+            xx = edgeStart.x + param * C;
+            yy = edgeStart.y + param * D;
+          }
+          const dx = eraserPoint.x - xx;
+          const dy = eraserPoint.y - yy;
+          if (Math.sqrt(dx * dx + dy * dy) < eraserRadius) return true;
+        }
+        return false;
+      }
+
+      if (shape === "arrow") {
+        // Check distance from point to arrow line segment
+        const A = eraserPoint.x - start.x;
+        const B = eraserPoint.y - start.y;
+        const C = end.x - start.x;
+        const D = end.y - start.y;
+        const dot = A * C + B * D;
+        const lenSq = C * C + D * D;
+        let param = -1;
+        if (lenSq !== 0) param = dot / lenSq;
+        let xx, yy;
+        if (param < 0) {
+          xx = start.x;
+          yy = start.y;
+        } else if (param > 1) {
+          xx = end.x;
+          yy = end.y;
+        } else {
+          xx = start.x + param * C;
+          yy = start.y + param * D;
+        }
+        const dx = eraserPoint.x - xx;
+        const dy = eraserPoint.y - yy;
+        return Math.sqrt(dx * dx + dy * dy) < eraserRadius;
+      }
+
+      return false;
+    },
+    [],
+  );
+
   // Redraw the canvas
   const redraw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -274,17 +431,12 @@ export function InfiniteCanvas() {
       if (selectedShape === "pen") {
         setCurrentLine((prev) => [...prev, point]);
       } else if (selectedShape === "eraser") {
-        // Eraser mode - remove lines that are close to the cursor
-        const eraserRadius = 10 / scale;
+        // Eraser mode - remove shapes that intersect with the cursor
+        const eraserRadius = 20 / scale;
         setLines((prev) =>
-          prev.filter((line) => {
-            return !line.points.some(
-              (p) =>
-                Math.sqrt(
-                  Math.pow(p.x - point.x, 2) + Math.pow(p.y - point.y, 2),
-                ) < eraserRadius,
-            );
-          }),
+          prev.filter(
+            (line) => !eraserIntersectsShape(line, point, eraserRadius),
+          ),
         );
       } else {
         // For shapes, just update the end point
@@ -390,22 +542,26 @@ export function InfiniteCanvas() {
         onPointerUp={handlePointerUp}
         onPointerLeave={handlePointerUp}
         onWheel={handleWheel}
-        className="cursor-crosshair touch-none"
+        className="touch-none"
         style={{
           width: "100%",
           height: "100%",
           overscrollBehavior: "none",
+          cursor:
+            selectedShape === "eraser"
+              ? 'url(\'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><circle cx="16" cy="16" r="10" fill="none" stroke="white" stroke-width="2"/></svg>\') 16 16, auto'
+              : "crosshair",
         }}
       />
 
       {/* Shape Toolbar */}
-      <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-white dark:bg-gray-800 px-4 py-2 rounded-lg shadow-lg flex gap-2">
+      <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-gradient-to-r from-amber-500/90 to-yellow-500/90 backdrop-blur-sm px-4 py-2 rounded-lg shadow-lg flex gap-2">
         <button
           onClick={() => setSelectedShape("pen")}
           className={`p-2 rounded transition-colors ${
             selectedShape === "pen"
-              ? "bg-blue-500 text-white"
-              : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
+              ? "bg-white text-amber-600 shadow-md"
+              : "bg-black/20 text-white hover:bg-black/30"
           }`}
           title="Pen (Free Draw)"
         >
@@ -428,8 +584,8 @@ export function InfiniteCanvas() {
           onClick={() => setSelectedShape("line")}
           className={`p-2 rounded transition-colors ${
             selectedShape === "line"
-              ? "bg-blue-500 text-white"
-              : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
+              ? "bg-white text-amber-600 shadow-md"
+              : "bg-black/20 text-white hover:bg-black/30"
           }`}
           title="Line"
         >
@@ -450,8 +606,8 @@ export function InfiniteCanvas() {
           onClick={() => setSelectedShape("square")}
           className={`p-2 rounded transition-colors ${
             selectedShape === "square"
-              ? "bg-blue-500 text-white"
-              : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
+              ? "bg-white text-amber-600 shadow-md"
+              : "bg-black/20 text-white hover:bg-black/30"
           }`}
           title="Square"
         >
@@ -470,8 +626,8 @@ export function InfiniteCanvas() {
           onClick={() => setSelectedShape("triangle")}
           className={`p-2 rounded transition-colors ${
             selectedShape === "triangle"
-              ? "bg-blue-500 text-white"
-              : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
+              ? "bg-white text-amber-600 shadow-md"
+              : "bg-black/20 text-white hover:bg-black/30"
           }`}
           title="Triangle"
         >
@@ -492,8 +648,8 @@ export function InfiniteCanvas() {
           onClick={() => setSelectedShape("circle")}
           className={`p-2 rounded transition-colors ${
             selectedShape === "circle"
-              ? "bg-blue-500 text-white"
-              : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
+              ? "bg-white text-amber-600 shadow-md"
+              : "bg-black/20 text-white hover:bg-black/30"
           }`}
           title="Circle"
         >
@@ -512,8 +668,8 @@ export function InfiniteCanvas() {
           onClick={() => setSelectedShape("arrow")}
           className={`p-2 rounded transition-colors ${
             selectedShape === "arrow"
-              ? "bg-blue-500 text-white"
-              : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
+              ? "bg-white text-amber-600 shadow-md"
+              : "bg-black/20 text-white hover:bg-black/30"
           }`}
           title="Arrow"
         >
@@ -535,8 +691,8 @@ export function InfiniteCanvas() {
           onClick={() => setSelectedShape("eraser")}
           className={`p-2 rounded transition-colors ${
             selectedShape === "eraser"
-              ? "bg-blue-500 text-white"
-              : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
+              ? "bg-white text-amber-600 shadow-md"
+              : "bg-black/20 text-white hover:bg-black/30"
           }`}
           title="Eraser"
         >
