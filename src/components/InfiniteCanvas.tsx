@@ -54,31 +54,6 @@ export function InfiniteCanvas() {
     ctx.translate(offset.x, offset.y);
     ctx.scale(scale, scale);
 
-    // Draw grid
-    ctx.strokeStyle = "#e5e7eb";
-    ctx.lineWidth = 1 / scale;
-    const gridSize = 50;
-    const startX = Math.floor(-offset.x / scale / gridSize) * gridSize;
-    const startY = Math.floor(-offset.y / scale / gridSize) * gridSize;
-    const endX =
-      Math.ceil((canvas.width - offset.x) / scale / gridSize) * gridSize;
-    const endY =
-      Math.ceil((canvas.height - offset.y) / scale / gridSize) * gridSize;
-
-    for (let x = startX; x <= endX; x += gridSize) {
-      ctx.beginPath();
-      ctx.moveTo(x, startY);
-      ctx.lineTo(x, endY);
-      ctx.stroke();
-    }
-
-    for (let y = startY; y <= endY; y += gridSize) {
-      ctx.beginPath();
-      ctx.moveTo(startX, y);
-      ctx.lineTo(endX, y);
-      ctx.stroke();
-    }
-
     // Draw all lines
     lines.forEach((line) => {
       if (line.points.length < 2) return;
@@ -100,7 +75,7 @@ export function InfiniteCanvas() {
 
     // Draw current line
     if (currentLine.length > 0) {
-      ctx.strokeStyle = "#000000";
+      ctx.strokeStyle = "#ffffff";
       ctx.lineWidth = 2 / scale;
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
@@ -142,8 +117,8 @@ export function InfiniteCanvas() {
 
   // Mouse/Touch event handlers
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (e.button === 1 || e.button === 2 || e.ctrlKey || e.metaKey) {
-      // Middle or right mouse button, or cmd/ctrl key - pan mode
+    if (e.button === 1 || e.button === 2 || e.metaKey) {
+      // Middle or right mouse button, or cmd key - pan mode
       setIsPanning(true);
       setLastPanPoint({ x: e.clientX, y: e.clientY });
       e.preventDefault();
@@ -175,14 +150,14 @@ export function InfiniteCanvas() {
       if (currentLine.length > 0) {
         setLines((prev) => [
           ...prev,
-          { points: currentLine, color: "#000000", width: 2 },
+          { points: currentLine, color: "#ffffff", width: 2 },
         ]);
         setCurrentLine([]);
       }
     }
   };
 
-  // Wheel event for zooming
+  // Wheel event for zooming and panning
   const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
     // Check if it's a pinch gesture (ctrlKey is set on trackpad pinch)
     if (e.ctrlKey) {
@@ -207,6 +182,13 @@ export function InfiniteCanvas() {
       }));
 
       setScale(newScale);
+    } else {
+      // Two-finger pan (regular scroll without ctrl)
+      e.preventDefault();
+      setOffset((prev) => ({
+        x: prev.x - e.deltaX,
+        y: prev.y - e.deltaY,
+      }));
     }
   };
 
@@ -231,7 +213,7 @@ export function InfiniteCanvas() {
   }, []);
 
   return (
-    <div className="relative w-full h-screen overflow-hidden bg-white dark:bg-gray-900">
+    <div className="relative w-full h-screen overflow-hidden bg-black">
       <canvas
         ref={canvasRef}
         onPointerDown={handlePointerDown}
@@ -257,7 +239,7 @@ export function InfiniteCanvas() {
         </p>
         <ul className="text-xs text-gray-600 dark:text-gray-400 space-y-1">
           <li>• Draw: Click and drag</li>
-          <li>• Pan: Cmd/Ctrl + drag or middle mouse</li>
+          <li>• Pan: Cmd + drag, middle mouse, or two-finger drag</li>
           <li>• Zoom: Pinch or Ctrl + scroll</li>
           <li>• Undo: Cmd/Ctrl + Z</li>
           <li>• Reset: Cmd/Ctrl + 0</li>
