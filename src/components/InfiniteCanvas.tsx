@@ -41,6 +41,79 @@ export function InfiniteCanvas() {
     end: Point;
   } | null>(null);
   const [clipboard, setClipboard] = useState<DrawingLine[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const userId = "default-user"; // Can be replaced with actual user ID from auth
+
+  // Load canvas data from database on mount
+  useEffect(() => {
+    const loadCanvas = async () => {
+      try {
+        const response = await fetch(`/api/canvas?userId=${userId}`);
+        const result = await response.json();
+
+        if (result.success && result.data.lines) {
+          setLines(result.data.lines);
+        }
+      } catch (error) {
+        console.error("Error loading canvas:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadCanvas();
+  }, [userId]);
+
+  // Save canvas data to database (with debounce)
+  useEffect(() => {
+    if (isLoading) return; // Don't save while loading
+
+    const saveCanvas = async () => {
+      try {
+        await fetch("/api/canvas", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            userId,
+            lines,
+          }),
+        });
+      } catch (error) {
+        console.error("Error saving canvas:", error);
+      }
+    };
+
+    // Debounce saves - wait 1 second after last change
+    const timeoutId = setTimeout(() => {
+      saveCanvas();
+    }, 1000);
+
+    return () => clearTimeout(timeoutId);
+  }, [lines, userId, isLoading]);
+
+  // Save before page unload
+  useEffect(() => {
+    const handleBeforeUnload = async () => {
+      if (lines.length > 0) {
+        // Use sendBeacon for reliable save on unload
+        const blob = new Blob(
+          [
+            JSON.stringify({
+              userId,
+              lines,
+            }),
+          ],
+          { type: "application/json" },
+        );
+        navigator.sendBeacon("/api/canvas", blob);
+      }
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [lines, userId]);
 
   // Transform screen coordinates to canvas coordinates
   const screenToCanvas = useCallback(
@@ -793,6 +866,11 @@ export function InfiniteCanvas() {
         touchAction: "none",
       }}
     >
+      {isLoading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black z-50">
+          <div className="text-white text-xl">Loading canvas...</div>
+        </div>
+      )}
       <canvas
         ref={canvasRef}
         onPointerDown={handlePointerDown}
