@@ -195,6 +195,13 @@ export function InfiniteCanvas() {
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Prevent browser zoom
+      if (
+        (e.metaKey || e.ctrlKey) &&
+        (e.key === "+" || e.key === "-" || e.key === "=" || e.key === "_")
+      ) {
+        e.preventDefault();
+      }
       // Cmd/Ctrl + 0 to reset zoom
       if ((e.metaKey || e.ctrlKey) && e.key === "0") {
         e.preventDefault();
@@ -213,7 +220,13 @@ export function InfiniteCanvas() {
   }, []);
 
   return (
-    <div className="relative w-full h-screen overflow-hidden bg-black">
+    <div
+      className="relative w-full h-screen overflow-hidden bg-black"
+      style={{
+        overscrollBehavior: "none",
+        touchAction: "none",
+      }}
+    >
       <canvas
         ref={canvasRef}
         onPointerDown={handlePointerDown}
@@ -222,7 +235,11 @@ export function InfiniteCanvas() {
         onPointerLeave={handlePointerUp}
         onWheel={handleWheel}
         className="cursor-crosshair touch-none"
-        style={{ width: "100%", height: "100%" }}
+        style={{
+          width: "100%",
+          height: "100%",
+          overscrollBehavior: "none",
+        }}
       />
 
       {/* Zoom indicator */}
