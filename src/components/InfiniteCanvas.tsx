@@ -1117,8 +1117,8 @@ export function InfiniteCanvas() {
         </div>
       </div>
 
-      {/* Line Customization Panel - Left Side */}
-      {selectedShape === "line" && (
+      {/* Drawing Tool Customization Panel - Left Side */}
+      {selectedShape !== "select" && selectedShape !== "eraser" && (
         <div
           className="absolute left-6 top-1/2 transform -translate-y-1/2 flex flex-col gap-4 px-5 py-6 rounded-2xl backdrop-blur-md border border-white/10 shadow-2xl z-20"
           style={{
@@ -1130,7 +1130,7 @@ export function InfiniteCanvas() {
           {/* Color Picker */}
           <div className="flex flex-col gap-2">
             <label className="text-sm font-medium" style={{ color: "#fbbf24" }}>
-              Line Color
+              Stroke Color
             </label>
             <div className="flex flex-col gap-2">
               <input
@@ -1157,7 +1157,7 @@ export function InfiniteCanvas() {
                 className="text-sm font-medium"
                 style={{ color: "#fbbf24" }}
               >
-                Line Width
+                Stroke Width
               </label>
               <span className="text-xs font-medium text-white/60">
                 {lineWidth}px
