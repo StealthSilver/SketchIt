@@ -56,6 +56,7 @@ export function InfiniteCanvas() {
         const result = await response.json();
 
         if (result.success && result.data.lines) {
+          console.log("Loaded canvas data:", result.data.lines.length, "lines");
           setLines(result.data.lines);
         }
       } catch (error) {
@@ -74,6 +75,7 @@ export function InfiniteCanvas() {
 
     const saveCanvas = async () => {
       try {
+        console.log("Saving canvas with", lines.length, "lines");
         await fetch("/api/canvas", {
           method: "POST",
           headers: {
@@ -359,6 +361,8 @@ export function InfiniteCanvas() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
+    console.log("Redrawing canvas with", lines.length, "lines");
+
     // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -603,7 +607,15 @@ export function InfiniteCanvas() {
 
     // Restore context state
     ctx.restore();
-  }, [lines, currentLine, scale, offset, selectedShape]);
+  }, [
+    lines,
+    currentLine,
+    scale,
+    offset,
+    selectedShape,
+    selectedShapes,
+    selectionBox,
+  ]);
 
   // Handle canvas resize
   useEffect(() => {
@@ -625,6 +637,22 @@ export function InfiniteCanvas() {
   useEffect(() => {
     redraw();
   }, [redraw]);
+
+  // Force redraw after loading completes
+  useEffect(() => {
+    if (!isLoading && lines.length > 0) {
+      console.log(
+        "Loading complete, forcing redraw with",
+        lines.length,
+        "lines",
+      );
+      // Small delay to ensure canvas is ready
+      const timeoutId = setTimeout(() => {
+        redraw();
+      }, 100);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [isLoading, lines.length, redraw]);
 
   // Mouse/Touch event handlers
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
