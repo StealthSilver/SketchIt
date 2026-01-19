@@ -1,0 +1,374 @@
+"use client";
+
+import { useState } from "react";
+import { X, Sparkles, Loader2 } from "lucide-react";
+
+interface AIDrawerProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSVGGenerated: (svg: string) => void;
+}
+
+export function AIDrawer({ isOpen, onClose, onSVGGenerated }: AIDrawerProps) {
+  const [prompt, setPrompt] = useState("");
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [error, setError] = useState("");
+  const [retryCount, setRetryCount] = useState(0);
+  const [lastRequestTime, setLastRequestTime] = useState(0);
+  const [cooldownRemaining, setCooldownRemaining] = useState(0);
+
+  const COOLDOWN_SECONDS = 5; // Minimum 5 seconds between requests
+
+  // Update cooldown timer
+  useState(() => {
+    if (cooldownRemaining > 0) {
+      const timer = setInterval(() => {
+        setCooldownRemaining((prev) => Math.max(0, prev - 1));
+      }, 1000);
+      return () => clearInterval(timer);
+    }
+  });
+
+  const handleGenerate = async () => {
+    if (!prompt.trim()) {
+      setError("Please enter a prompt");
+      return;
+    }
+
+    // Check cooldown
+    const now = Date.now();
+    const timeSinceLastRequest = (now - lastRequestTime) / 1000;
+    if (timeSinceLastRequest < COOLDOWN_SECONDS && lastRequestTime > 0) {
+      setError(
+        `Please wait ${Math.ceil(COOLDOWN_SECONDS - timeSinceLastRequest)} more seconds before making another request.`,
+      );
+      return;
+    }
+
+    setIsGenerating(true);
+    setError("");
+    setLastRequestTime(now);
+    setCooldownRemaining(COOLDOWN_SECONDS);
+
+    try {
+      const response = await fetch("/api/generate-svg", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ prompt }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        // Handle rate limiting with specific message
+        if (response.status === 429) {
+          const retryMessage =
+            data.retryAfter ||
+            "Rate limit exceeded. Please wait a moment and try again.";
+          throw new Error(retryMessage);
+        }
+        throw new Error(data.error || "Failed to generate SVG");
+      }
+
+      if (data.svg) {
+        onSVGGenerated(data.svg);
+        setPrompt("");
+        setRetryCount(0);
+        onClose();
+      }
+    } catch (err) {
+      const errorMessage =
+        err instanceof Error ? err.message : "An error occurred";
+      setError(errorMessage);
+
+      // Only increment retry count for rate limit errors
+      if (
+        errorMessage.includes("Rate limit") ||
+        errorMessage.includes("quota")
+      ) {
+        setRetryCount((prev) => prev + 1);
+      }
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleGenerate();
+    }
+  };
+
+  return (
+    <>
+      {/* Backdrop */}
+      {isOpen && (
+        <div
+          className="fixed inset-0 backdrop-blur-sm z-40 transition-opacity"
+          style={{ background: "rgba(1, 8, 18, 0.8)" }}
+          onClick={onClose}
+        />
+      )}
+
+      {/* Drawer */}
+      <div
+        className={`fixed right-0 top-0 h-full w-[420px] z-50 transform transition-transform duration-300 ease-in-out border-l ${
+          isOpen ? "translate-x-0" : "translate-x-full"
+        }`}
+        style={{
+          background: "#010812",
+          borderColor: "rgba(251, 191, 36, 0.1)",
+        }}
+      >
+        <div className="flex flex-col h-full">
+          {/* Header */}
+          <div
+            className="flex items-center justify-between p-6 border-b"
+            style={{ borderColor: "rgba(251, 191, 36, 0.1)" }}
+          >
+            <div className="flex items-center gap-3">
+              <div
+                className="p-2 rounded-lg"
+                style={{ background: "rgba(251, 191, 36, 0.1)" }}
+              >
+                <svg
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="#fbbf24"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M12 2L2 7l10 5 10-5-10-5z" />
+                  <path d="M2 17l10 5 10-5" />
+                  <path d="M2 12l10 5 10-5" />
+                </svg>
+              </div>
+              <div>
+                <h2 className="text-xl font-bold" style={{ color: "#fbbf24" }}>
+                  AI Generator
+                </h2>
+                <p
+                  className="text-xs"
+                  style={{ color: "rgba(251, 191, 36, 0.6)" }}
+                >
+                  Create diagrams with AI
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="p-2 rounded-lg transition-all hover:scale-110"
+              style={{ background: "rgba(255, 255, 255, 0.05)" }}
+            >
+              <X className="w-5 h-5" style={{ color: "#fbbf24" }} />
+            </button>
+          </div>
+
+          {/* Content */}
+          <div className="flex-1 p-6 overflow-y-auto custom-scrollbar">
+            <div className="space-y-6">
+              {/* Prompt Input */}
+              <div>
+                <label
+                  htmlFor="prompt"
+                  className="block text-sm font-medium mb-3"
+                  style={{ color: "#fbbf24" }}
+                >
+                  Describe your diagram
+                </label>
+                <textarea
+                  id="prompt"
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  onKeyPress={handleKeyPress}
+                  placeholder="E.g., A flowchart showing user authentication, A network architecture diagram, A mind map about project planning..."
+                  className="w-full h-32 px-4 py-3 rounded-lg border resize-none transition-all focus:outline-none focus:ring-2"
+                  style={{
+                    background: "rgba(255, 255, 255, 0.03)",
+                    borderColor: "rgba(251, 191, 36, 0.2)",
+                    color: "#ededed",
+                  }}
+                  disabled={isGenerating}
+                />
+                <p
+                  className="mt-2 text-xs"
+                  style={{ color: "rgba(251, 191, 36, 0.5)" }}
+                >
+                  Press Enter to generate • Shift+Enter for new line
+                </p>
+              </div>
+
+              {/* Error Message */}
+              {error && (
+                <div
+                  className="p-4 rounded-lg border"
+                  style={{
+                    background: "rgba(177, 9, 16, 0.1)",
+                    borderColor: "rgba(177, 9, 16, 0.3)",
+                  }}
+                >
+                  <div className="flex items-start gap-3">
+                    <svg
+                      className="w-5 h-5 shrink-0 mt-0.5"
+                      fill="#b10910"
+                      viewBox="0 0 20 20"
+                    >
+                      <path
+                        fillRule="evenodd"
+                        d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                    <div className="flex-1">
+                      <p
+                        className="text-sm font-medium"
+                        style={{ color: "#ff6b6b" }}
+                      >
+                        {error}
+                      </p>
+                      {error.includes("Rate limit") && (
+                        <div
+                          className="mt-2 text-xs"
+                          style={{ color: "rgba(255, 107, 107, 0.8)" }}
+                        >
+                          <p className="font-semibold mb-1">Common causes:</p>
+                          <ul className="list-disc list-inside space-y-1 ml-2">
+                            <li>Making requests too quickly</li>
+                            <li>Free tier rate limit reached</li>
+                            <li>Monthly quota exceeded</li>
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Example Prompts */}
+              <div className="space-y-3">
+                <h3
+                  className="text-sm font-semibold"
+                  style={{ color: "#fbbf24" }}
+                >
+                  Quick Examples
+                </h3>
+                <div className="space-y-2">
+                  {[
+                    "A simple flowchart with 3 steps",
+                    "A mind map about project planning",
+                    "A network diagram with servers",
+                    "An organizational chart",
+                    "A timeline of project milestones",
+                  ].map((example, index) => (
+                    <button
+                      key={index}
+                      onClick={() => setPrompt(example)}
+                      disabled={isGenerating}
+                      className="w-full text-left px-4 py-2.5 rounded-lg text-sm transition-all hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed border"
+                      style={{
+                        background: "rgba(255, 255, 255, 0.03)",
+                        borderColor: "rgba(251, 191, 36, 0.15)",
+                        color: "#ededed",
+                      }}
+                    >
+                      {example}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div
+            className="p-6 border-t"
+            style={{ borderColor: "rgba(251, 191, 36, 0.1)" }}
+          >
+            {cooldownRemaining > 0 && !isGenerating && (
+              <div
+                className="text-xs text-center mb-3 flex items-center justify-center gap-2"
+                style={{ color: "rgba(251, 191, 36, 0.6)" }}
+              >
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <circle cx="12" cy="12" r="10" />
+                  <polyline points="12 6 12 12 16 14" />
+                </svg>
+                Wait {cooldownRemaining}s before next request
+              </div>
+            )}
+            <button
+              onClick={handleGenerate}
+              disabled={isGenerating || !prompt.trim() || cooldownRemaining > 0}
+              className="w-full flex items-center justify-center gap-3 px-6 py-3.5 rounded-lg font-semibold transition-all hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100 shadow-lg"
+              style={{
+                background:
+                  isGenerating || cooldownRemaining > 0
+                    ? "rgba(255, 255, 255, 0.1)"
+                    : "linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)",
+                color:
+                  isGenerating || cooldownRemaining > 0 ? "#fbbf24" : "#010812",
+              }}
+            >
+              {isGenerating ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Generating...
+                </>
+              ) : cooldownRemaining > 0 ? (
+                <>
+                  <svg
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <circle cx="12" cy="12" r="10" />
+                    <polyline points="12 6 12 12 16 14" />
+                  </svg>
+                  Wait {cooldownRemaining}s
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-5 h-5" />
+                  Generate Diagram
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <style jsx>{`
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: rgba(255, 255, 255, 0.03);
+          border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: rgba(251, 191, 36, 0.3);
+          border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: rgba(251, 191, 36, 0.5);
+        }
+      `}</style>
+    </>
+  );
+}

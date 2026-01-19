@@ -63,7 +63,7 @@ export function About() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ duration: 0.6, delay: i * 0.1 }}
-                className="glass rounded-2xl p-8 text-left hover:translate-y-[-4px] transition-transform duration-300"
+                className="glass rounded-2xl p-8 text-left hover:-translate-y-1 transition-transform duration-300"
               >
                 <item.icon className="w-8 h-8 text-accent mb-4" />
                 <h3 className="font-display text-xl font-semibold mb-2">

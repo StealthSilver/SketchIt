@@ -72,7 +72,7 @@ export function Services() {
                 transition={{ duration: 0.6, delay: i * 0.1 }}
                 className="glass rounded-2xl p-8 flex gap-6"
               >
-                <service.icon className="w-8 h-8 text-accent flex-shrink-0" />
+                <service.icon className="w-8 h-8 text-accent shrink-0" />
                 <div>
                   <h3 className="font-display text-xl font-semibold mb-2">
                     {service.title}

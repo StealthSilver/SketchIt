@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useEffect, useState, useCallback } from "react";
+import { AIDrawer } from "./AIDrawer";
 
 interface Point {
   x: number;
@@ -22,6 +23,8 @@ interface DrawingLine {
   color: string;
   width: number;
   shape?: ShapeType;
+  svgData?: string;
+  svgSize?: { width: number; height: number };
 }
 
 export function InfiniteCanvas() {
@@ -42,6 +45,7 @@ export function InfiniteCanvas() {
   } | null>(null);
   const [clipboard, setClipboard] = useState<DrawingLine[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isAIDrawerOpen, setIsAIDrawerOpen] = useState(false);
   const userId = "default-user"; // Can be replaced with actual user ID from auth
 
   // Load canvas data from database on mount
@@ -443,6 +447,25 @@ export function InfiniteCanvas() {
           end.y - headLength * Math.sin(angle + Math.PI / 6),
         );
         ctx.stroke();
+      }
+
+      // Render SVG if present
+      if (line.svgData && line.svgSize && line.points.length >= 2) {
+        const start = line.points[0];
+        const blob = new Blob([line.svgData], { type: "image/svg+xml" });
+        const url = URL.createObjectURL(blob);
+        const img = new Image();
+        img.onload = () => {
+          ctx.drawImage(
+            img,
+            start.x,
+            start.y,
+            line.svgSize!.width / scale,
+            line.svgSize!.height / scale,
+          );
+          URL.revokeObjectURL(url);
+        };
+        img.src = url;
       }
     });
     // Draw selection highlights
@@ -858,17 +881,94 @@ export function InfiniteCanvas() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [selectedShape, selectedShapes, clipboard, lines, scale]);
 
+  // Handle AI-generated SVG
+  const handleSVGGenerated = (svgString: string) => {
+    try {
+      // Create an image from the SVG
+      const blob = new Blob([svgString], { type: "image/svg+xml" });
+      const url = URL.createObjectURL(blob);
+      const img = new Image();
+
+      img.onload = () => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+
+        // Calculate position (center of viewport)
+        const centerX = canvas.width / 2 - offset.x;
+        const centerY = canvas.height / 2 - offset.y;
+
+        // Scale the SVG to a reasonable size (max 400px)
+        const maxSize = 400;
+        const scaleFactor = Math.min(
+          maxSize / img.width,
+          maxSize / img.height,
+          1,
+        );
+        const width = img.width * scaleFactor;
+        const height = img.height * scaleFactor;
+
+        // Convert SVG to canvas points by creating an outline
+        // For simplicity, we'll add it as a series of connected points forming a rectangle
+        // with the image data stored (you could enhance this to trace the actual SVG paths)
+        const svgPoints: Point[] = [
+          { x: centerX / scale, y: centerY / scale },
+          { x: (centerX + width) / scale, y: centerY / scale },
+          { x: (centerX + width) / scale, y: (centerY + height) / scale },
+          { x: centerX / scale, y: (centerY + height) / scale },
+          { x: centerX / scale, y: centerY / scale },
+        ];
+
+        // Store SVG data in a new line object
+        const newLine: DrawingLine & {
+          svgData?: string;
+          svgSize?: { width: number; height: number };
+        } = {
+          points: svgPoints,
+          color: "#000000",
+          width: 2,
+          shape: "square",
+          svgData: svgString,
+          svgSize: { width, height },
+        };
+
+        setLines((prev) => [...prev, newLine]);
+        URL.revokeObjectURL(url);
+      };
+
+      img.onerror = () => {
+        console.error("Failed to load SVG image");
+        URL.revokeObjectURL(url);
+      };
+
+      img.src = url;
+    } catch (error) {
+      console.error("Error handling SVG:", error);
+    }
+  };
+
   return (
     <div
-      className="relative w-full h-screen overflow-hidden bg-black"
+      className="relative w-full h-screen overflow-hidden"
       style={{
+        background: "#010812",
         overscrollBehavior: "none",
         touchAction: "none",
       }}
     >
       {isLoading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black z-50">
-          <div className="text-white text-xl">Loading canvas...</div>
+        <div
+          className="absolute inset-0 flex items-center justify-center z-50"
+          style={{ background: "#010812" }}
+        >
+          <div className="flex flex-col items-center gap-4">
+            <div className="w-12 h-12 border-4 border-[#fbbf24] border-t-transparent rounded-full animate-spin" />
+            <div className="text-[#fbbf24] text-lg font-medium">
+              Loading canvas...
+            </div>
+          </div>
         </div>
       )}
       <canvas
@@ -885,30 +985,134 @@ export function InfiniteCanvas() {
           overscrollBehavior: "none",
           cursor:
             selectedShape === "eraser"
-              ? 'url(\'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><circle cx="16" cy="16" r="10" fill="none" stroke="white" stroke-width="2"/></svg>\') 16 16, auto'
+              ? 'url(\'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><circle cx="16" cy="16" r="10" fill="none" stroke="%23fbbf24" stroke-width="2"/></svg>\') 16 16, auto'
               : selectedShape === "select"
                 ? "default"
                 : "crosshair",
         }}
       />
 
-      {/* Shape Toolbar */}
-      <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-yellow-400/70 backdrop-blur-sm px-4 py-2 rounded-lg shadow-lg flex gap-2">
+      {/* Top Toolbar - Logo and Actions */}
+      <div
+        className="absolute top-6 left-6 right-6 flex items-center justify-between z-20"
+        style={{ pointerEvents: "none" }}
+      >
+        {/* Logo */}
+        <div
+          className="flex items-center gap-2 px-4 py-2 rounded-full backdrop-blur-md border border-white/10"
+          style={{
+            background: "rgba(255, 255, 255, 0.05)",
+            pointerEvents: "auto",
+          }}
+        >
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <path d="M12 2L2 7l10 5 10-5-10-5z" fill="#fbbf24" />
+            <path d="M2 17l10 5 10-5" fill="#f59e0b" opacity="0.7" />
+            <path d="M2 12l10 5 10-5" fill="#d97706" opacity="0.5" />
+          </svg>
+          <span className="font-bold text-lg" style={{ color: "#fbbf24" }}>
+            SketchIt
+          </span>
+        </div>
+
+        {/* Action Buttons */}
+        <div
+          className="flex items-center gap-2"
+          style={{ pointerEvents: "auto" }}
+        >
+          <button
+            onClick={() => {
+              setScale(1);
+              setOffset({ x: 0, y: 0 });
+            }}
+            className="p-2.5 rounded-full backdrop-blur-md border border-white/10 transition-all hover:scale-105 hover:border-[#fbbf24]/50"
+            style={{ background: "rgba(255, 255, 255, 0.05)" }}
+            title="Reset View (Cmd+0)"
+          >
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="#fbbf24"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M3 3v18h18" />
+              <path d="M18.7 8C18 5.8 16.2 4 14 3.5 11.8 3 9.5 3.5 7.5 5" />
+              <path d="M21 12c0 5-4 9-9 9s-9-4-9-9" />
+            </svg>
+          </button>
+
+          <button
+            onClick={() => setLines((prev) => prev.slice(0, -1))}
+            className="p-2.5 rounded-full backdrop-blur-md border border-white/10 transition-all hover:scale-105 hover:border-[#fbbf24]/50"
+            style={{ background: "rgba(255, 255, 255, 0.05)" }}
+            title="Undo (Cmd+Z)"
+          >
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="#fbbf24"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M3 7v6h6" />
+              <path d="M21 17a9 9 0 00-9-9 9 9 0 00-6 2.3L3 13" />
+            </svg>
+          </button>
+
+          <button
+            onClick={() => setLines([])}
+            className="p-2.5 rounded-full backdrop-blur-md border border-white/10 transition-all hover:scale-105 hover:border-[#b10910]/50"
+            style={{ background: "rgba(177, 9, 16, 0.1)" }}
+            title="Clear Canvas"
+          >
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="#b10910"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M3 6h18" />
+              <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+              <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      {/* Center Toolbar - Shape Tools */}
+      <div
+        className="absolute top-6 left-1/2 transform -translate-x-1/2 flex items-center gap-1.5 px-3 py-2.5 rounded-full backdrop-blur-md border border-white/10 shadow-2xl z-20"
+        style={{
+          background: "rgba(255, 255, 255, 0.05)",
+          pointerEvents: "auto",
+        }}
+      >
         <button
           onClick={() => setSelectedShape("select")}
-          className={`p-2 rounded transition-colors ${
+          className={`p-2.5 rounded-full transition-all ${
             selectedShape === "select"
-              ? "bg-white text-amber-600 shadow-md"
-              : "bg-black/20 text-white hover:bg-black/30"
+              ? "bg-[#fbbf24] shadow-lg shadow-[#fbbf24]/30"
+              : "hover:bg-white/10"
           }`}
           title="Select"
         >
           <svg
-            width="24"
-            height="24"
+            width="18"
+            height="18"
             viewBox="0 0 24 24"
             fill="none"
-            stroke="currentColor"
+            stroke={selectedShape === "select" ? "#010812" : "#fbbf24"}
             strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -916,45 +1120,47 @@ export function InfiniteCanvas() {
             <path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z" />
           </svg>
         </button>
+
         <button
           onClick={() => setSelectedShape("pen")}
-          className={`p-2 rounded transition-colors ${
+          className={`p-2.5 rounded-full transition-all ${
             selectedShape === "pen"
-              ? "bg-white text-amber-600 shadow-md"
-              : "bg-black/20 text-white hover:bg-black/30"
+              ? "bg-[#fbbf24] shadow-lg shadow-[#fbbf24]/30"
+              : "hover:bg-white/10"
           }`}
-          title="Pen (Free Draw)"
+          title="Pen"
         >
           <svg
-            width="24"
-            height="24"
+            width="18"
+            height="18"
             viewBox="0 0 24 24"
             fill="none"
-            stroke="currentColor"
+            stroke={selectedShape === "pen" ? "#010812" : "#fbbf24"}
             strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"
           >
-            <path d="M12 19l7-7 3 3-7 7-3-3z" />
-            <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" />
-            <path d="M2 2l7.586 7.586" />
+            <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
           </svg>
         </button>
+
+        <div className="w-px h-6 bg-white/10" />
+
         <button
           onClick={() => setSelectedShape("line")}
-          className={`p-2 rounded transition-colors ${
+          className={`p-2.5 rounded-full transition-all ${
             selectedShape === "line"
-              ? "bg-white text-amber-600 shadow-md"
-              : "bg-black/20 text-white hover:bg-black/30"
+              ? "bg-[#fbbf24] shadow-lg shadow-[#fbbf24]/30"
+              : "hover:bg-white/10"
           }`}
           title="Line"
         >
           <svg
-            width="24"
-            height="24"
+            width="18"
+            height="18"
             viewBox="0 0 24 24"
             fill="none"
-            stroke="currentColor"
+            stroke={selectedShape === "line" ? "#010812" : "#fbbf24"}
             strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -962,41 +1168,64 @@ export function InfiniteCanvas() {
             <line x1="5" y1="5" x2="19" y2="19" />
           </svg>
         </button>
+
         <button
           onClick={() => setSelectedShape("square")}
-          className={`p-2 rounded transition-colors ${
+          className={`p-2.5 rounded-full transition-all ${
             selectedShape === "square"
-              ? "bg-white text-amber-600 shadow-md"
-              : "bg-black/20 text-white hover:bg-black/30"
+              ? "bg-[#fbbf24] shadow-lg shadow-[#fbbf24]/30"
+              : "hover:bg-white/10"
           }`}
-          title="Square"
+          title="Rectangle"
         >
           <svg
-            width="24"
-            height="24"
+            width="18"
+            height="18"
             viewBox="0 0 24 24"
             fill="none"
-            stroke="currentColor"
+            stroke={selectedShape === "square" ? "#010812" : "#fbbf24"}
             strokeWidth="2"
           >
-            <rect x="4" y="4" width="16" height="16" />
+            <rect x="4" y="4" width="16" height="16" rx="2" />
           </svg>
         </button>
+
+        <button
+          onClick={() => setSelectedShape("circle")}
+          className={`p-2.5 rounded-full transition-all ${
+            selectedShape === "circle"
+              ? "bg-[#fbbf24] shadow-lg shadow-[#fbbf24]/30"
+              : "hover:bg-white/10"
+          }`}
+          title="Circle"
+        >
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke={selectedShape === "circle" ? "#010812" : "#fbbf24"}
+            strokeWidth="2"
+          >
+            <circle cx="12" cy="12" r="10" />
+          </svg>
+        </button>
+
         <button
           onClick={() => setSelectedShape("triangle")}
-          className={`p-2 rounded transition-colors ${
+          className={`p-2.5 rounded-full transition-all ${
             selectedShape === "triangle"
-              ? "bg-white text-amber-600 shadow-md"
-              : "bg-black/20 text-white hover:bg-black/30"
+              ? "bg-[#fbbf24] shadow-lg shadow-[#fbbf24]/30"
+              : "hover:bg-white/10"
           }`}
           title="Triangle"
         >
           <svg
-            width="24"
-            height="24"
+            width="18"
+            height="18"
             viewBox="0 0 24 24"
             fill="none"
-            stroke="currentColor"
+            stroke={selectedShape === "triangle" ? "#010812" : "#fbbf24"}
             strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -1004,41 +1233,22 @@ export function InfiniteCanvas() {
             <path d="M12 2 L2 22 L22 22 Z" />
           </svg>
         </button>
-        <button
-          onClick={() => setSelectedShape("circle")}
-          className={`p-2 rounded transition-colors ${
-            selectedShape === "circle"
-              ? "bg-white text-amber-600 shadow-md"
-              : "bg-black/20 text-white hover:bg-black/30"
-          }`}
-          title="Circle"
-        >
-          <svg
-            width="24"
-            height="24"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-          >
-            <circle cx="12" cy="12" r="10" />
-          </svg>
-        </button>
+
         <button
           onClick={() => setSelectedShape("arrow")}
-          className={`p-2 rounded transition-colors ${
+          className={`p-2.5 rounded-full transition-all ${
             selectedShape === "arrow"
-              ? "bg-white text-amber-600 shadow-md"
-              : "bg-black/20 text-white hover:bg-black/30"
+              ? "bg-[#fbbf24] shadow-lg shadow-[#fbbf24]/30"
+              : "hover:bg-white/10"
           }`}
           title="Arrow"
         >
           <svg
-            width="24"
-            height="24"
+            width="18"
+            height="18"
             viewBox="0 0 24 24"
             fill="none"
-            stroke="currentColor"
+            stroke={selectedShape === "arrow" ? "#010812" : "#fbbf24"}
             strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -1047,37 +1257,78 @@ export function InfiniteCanvas() {
             <polyline points="12 5 19 12 12 19" />
           </svg>
         </button>
+
+        <div className="w-px h-6 bg-white/10" />
+
         <button
           onClick={() => setSelectedShape("eraser")}
-          className={`p-2 rounded transition-colors ${
+          className={`p-2.5 rounded-full transition-all ${
             selectedShape === "eraser"
-              ? "bg-white text-amber-600 shadow-md"
-              : "bg-black/20 text-white hover:bg-black/30"
+              ? "bg-[#b10910] shadow-lg shadow-[#b10910]/30"
+              : "hover:bg-white/10"
           }`}
           title="Eraser"
         >
           <svg
-            width="24"
-            height="24"
+            width="18"
+            height="18"
             viewBox="0 0 24 24"
             fill="none"
-            stroke="currentColor"
+            stroke={selectedShape === "eraser" ? "#ffffff" : "#b10910"}
             strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"
           >
             <path d="M20 20H7L3 16 12 7 17 12M11 9L15 13" />
-            <path d="M8.5 14.5L11.5 17.5" />
           </svg>
         </button>
       </div>
 
-      {/* Zoom indicator */}
-      <div className="absolute bottom-4 right-4 bg-yellow-400/70 backdrop-blur-sm px-4 py-2 rounded-lg shadow-lg">
-        <p className="text-sm text-gray-900 font-medium">
-          Zoom: {Math.round(scale * 100)}%
-        </p>
+      {/* AI Button - Bottom Right */}
+      <div className="absolute bottom-6 right-6 flex items-center gap-3 z-20">
+        {/* Zoom indicator */}
+        <div
+          className="px-4 py-2.5 rounded-full backdrop-blur-md border border-white/10"
+          style={{ background: "rgba(255, 255, 255, 0.05)" }}
+        >
+          <p className="text-sm font-medium" style={{ color: "#fbbf24" }}>
+            {Math.round(scale * 100)}%
+          </p>
+        </div>
+
+        {/* AI Button */}
+        <button
+          onClick={() => setIsAIDrawerOpen(true)}
+          className="group relative px-5 py-3 rounded-full font-medium transition-all hover:scale-105 shadow-lg shadow-[#fbbf24]/20 flex items-center gap-2"
+          style={{
+            background: "linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)",
+          }}
+        >
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="#010812"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M12 2L2 7l10 5 10-5-10-5z" />
+            <path d="M2 17l10 5 10-5" />
+            <path d="M2 12l10 5 10-5" />
+          </svg>
+          <span style={{ color: "#010812" }}>AI Generate</span>
+          <div className="absolute -inset-1 rounded-full bg-gradient-to-r from-[#fbbf24] to-[#f59e0b] opacity-0 group-hover:opacity-30 blur transition-opacity" />
+        </button>
       </div>
+
+      {/* AI Drawer */}
+      <AIDrawer
+        isOpen={isAIDrawerOpen}
+        onClose={() => setIsAIDrawerOpen(false)}
+        onSVGGenerated={handleSVGGenerated}
+      />
     </div>
   );
 }
