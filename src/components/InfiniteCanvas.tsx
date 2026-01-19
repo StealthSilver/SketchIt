@@ -14,7 +14,8 @@ type ShapeType =
   | "triangle"
   | "circle"
   | "arrow"
-  | "eraser";
+  | "eraser"
+  | "select";
 
 interface DrawingLine {
   points: Point[];
@@ -34,6 +35,12 @@ export function InfiniteCanvas() {
   const [lastPanPoint, setLastPanPoint] = useState({ x: 0, y: 0 });
   const [selectedShape, setSelectedShape] = useState<ShapeType>("pen");
   const [startPoint, setStartPoint] = useState<Point | null>(null);
+  const [selectedShapes, setSelectedShapes] = useState<Set<number>>(new Set());
+  const [selectionBox, setSelectionBox] = useState<{
+    start: Point;
+    end: Point;
+  } | null>(null);
+  const [clipboard, setClipboard] = useState<DrawingLine[]>([]);
 
   // Transform screen coordinates to canvas coordinates
   const screenToCanvas = useCallback(
@@ -47,6 +54,68 @@ export function InfiniteCanvas() {
     },
     [scale, offset],
   );
+
+  // Check if a point is inside a shape's bounding box
+  const isPointInShape = useCallback(
+    (point: Point, line: DrawingLine, tolerance: number = 10) => {
+      if (line.points.length < 1) return false;
+      const shape = line.shape || "pen";
+
+      if (shape === "pen") {
+        // For pen, check if point is near any line segment
+        for (let i = 0; i < line.points.length - 1; i++) {
+          const p1 = line.points[i];
+          const p2 = line.points[i + 1];
+          const dist = distanceToSegment(point, p1, p2);
+          if (dist < tolerance / scale) return true;
+        }
+        return false;
+      }
+
+      if (line.points.length < 2) return false;
+      const start = line.points[0];
+      const end = line.points[line.points.length - 1];
+      const minX = Math.min(start.x, end.x);
+      const maxX = Math.max(start.x, end.x);
+      const minY = Math.min(start.y, end.y);
+      const maxY = Math.max(start.y, end.y);
+
+      // Check if point is in bounding box
+      return (
+        point.x >= minX - tolerance / scale &&
+        point.x <= maxX + tolerance / scale &&
+        point.y >= minY - tolerance / scale &&
+        point.y <= maxY + tolerance / scale
+      );
+    },
+    [scale],
+  );
+
+  // Helper function to calculate distance from point to line segment
+  const distanceToSegment = (point: Point, p1: Point, p2: Point): number => {
+    const A = point.x - p1.x;
+    const B = point.y - p1.y;
+    const C = p2.x - p1.x;
+    const D = p2.y - p1.y;
+    const dot = A * C + B * D;
+    const lenSq = C * C + D * D;
+    let param = -1;
+    if (lenSq !== 0) param = dot / lenSq;
+    let xx, yy;
+    if (param < 0) {
+      xx = p1.x;
+      yy = p1.y;
+    } else if (param > 1) {
+      xx = p2.x;
+      yy = p2.y;
+    } else {
+      xx = p1.x + param * C;
+      yy = p1.y + param * D;
+    }
+    const dx = point.x - xx;
+    const dy = point.y - yy;
+    return Math.sqrt(dx * dx + dy * dy);
+  };
 
   // Check if eraser intersects with a shape
   const eraserIntersectsShape = useCallback(
@@ -303,7 +372,63 @@ export function InfiniteCanvas() {
         ctx.stroke();
       }
     });
+    // Draw selection highlights
+    if (selectedShapes.size > 0) {
+      selectedShapes.forEach((index) => {
+        const line = lines[index];
+        if (!line || line.points.length < 1) return;
 
+        const shape = line.shape || "pen";
+        ctx.strokeStyle = "rgba(59, 130, 246, 0.8)"; // Blue highlight
+        ctx.lineWidth = 3 / scale;
+        ctx.setLineDash([5 / scale, 5 / scale]);
+
+        if (shape === "pen") {
+          // Draw bounding box for pen strokes
+          const xs = line.points.map((p) => p.x);
+          const ys = line.points.map((p) => p.y);
+          const minX = Math.min(...xs);
+          const maxX = Math.max(...xs);
+          const minY = Math.min(...ys);
+          const maxY = Math.max(...ys);
+          const padding = 5 / scale;
+          ctx.strokeRect(
+            minX - padding,
+            minY - padding,
+            maxX - minX + padding * 2,
+            maxY - minY + padding * 2,
+          );
+        } else if (line.points.length >= 2) {
+          const start = line.points[0];
+          const end = line.points[line.points.length - 1];
+          const minX = Math.min(start.x, end.x);
+          const maxX = Math.max(start.x, end.x);
+          const minY = Math.min(start.y, end.y);
+          const maxY = Math.max(start.y, end.y);
+          const padding = 5 / scale;
+          ctx.strokeRect(
+            minX - padding,
+            minY - padding,
+            maxX - minX + padding * 2,
+            maxY - minY + padding * 2,
+          );
+        }
+        ctx.setLineDash([]);
+      });
+    }
+
+    // Draw selection box
+    if (selectionBox) {
+      ctx.strokeStyle = "rgba(59, 130, 246, 0.5)";
+      ctx.fillStyle = "rgba(59, 130, 246, 0.1)";
+      ctx.lineWidth = 1 / scale;
+      ctx.setLineDash([5 / scale, 5 / scale]);
+      const width = selectionBox.end.x - selectionBox.start.x;
+      const height = selectionBox.end.y - selectionBox.start.y;
+      ctx.fillRect(selectionBox.start.x, selectionBox.start.y, width, height);
+      ctx.strokeRect(selectionBox.start.x, selectionBox.start.y, width, height);
+      ctx.setLineDash([]);
+    }
     // Draw current line (preview)
     if (currentLine.length > 0) {
       ctx.strokeStyle = "#ffffff";
@@ -407,11 +532,49 @@ export function InfiniteCanvas() {
 
   // Mouse/Touch event handlers
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (e.button === 1 || e.button === 2 || e.metaKey) {
-      // Middle or right mouse button, or cmd key - pan mode
+    if (
+      e.button === 1 ||
+      e.button === 2 ||
+      (e.metaKey && selectedShape !== "select")
+    ) {
+      // Middle or right mouse button, or cmd key - pan mode (except in select mode)
       setIsPanning(true);
       setLastPanPoint({ x: e.clientX, y: e.clientY });
       e.preventDefault();
+    } else if (selectedShape === "select") {
+      // Selection mode
+      const point = screenToCanvas(e.clientX, e.clientY);
+
+      // Check if clicking on an already selected shape
+      let clickedSelected = false;
+      for (const index of selectedShapes) {
+        if (isPointInShape(point, lines[index])) {
+          clickedSelected = true;
+          break;
+        }
+      }
+
+      if (clickedSelected) {
+        // Keep selection and prepare for potential drag
+        setIsDrawing(false);
+      } else {
+        // Check if clicking on a new shape
+        let foundShape = false;
+        for (let i = lines.length - 1; i >= 0; i--) {
+          if (isPointInShape(point, lines[i])) {
+            setSelectedShapes(new Set([i]));
+            foundShape = true;
+            break;
+          }
+        }
+
+        if (!foundShape) {
+          // Start selection box
+          setSelectedShapes(new Set());
+          setSelectionBox({ start: point, end: point });
+          setIsDrawing(true);
+        }
+      }
     } else {
       // Left mouse button - draw mode
       setIsDrawing(true);
@@ -428,7 +591,10 @@ export function InfiniteCanvas() {
       setLastPanPoint({ x: e.clientX, y: e.clientY });
     } else if (isDrawing) {
       const point = screenToCanvas(e.clientX, e.clientY);
-      if (selectedShape === "pen") {
+      if (selectedShape === "select" && selectionBox) {
+        // Update selection box
+        setSelectionBox((prev) => (prev ? { ...prev, end: point } : null));
+      } else if (selectedShape === "pen") {
         setCurrentLine((prev) => [...prev, point]);
       } else if (selectedShape === "eraser") {
         // Eraser mode - remove shapes that intersect with the cursor
@@ -450,7 +616,29 @@ export function InfiniteCanvas() {
       setIsPanning(false);
     } else if (isDrawing) {
       setIsDrawing(false);
-      if (currentLine.length > 0 && selectedShape !== "eraser") {
+
+      if (selectedShape === "select" && selectionBox) {
+        // Find shapes within selection box
+        const minX = Math.min(selectionBox.start.x, selectionBox.end.x);
+        const maxX = Math.max(selectionBox.start.x, selectionBox.end.x);
+        const minY = Math.min(selectionBox.start.y, selectionBox.end.y);
+        const maxY = Math.max(selectionBox.start.y, selectionBox.end.y);
+
+        const selected = new Set<number>();
+        lines.forEach((line, index) => {
+          if (line.points.length < 1) return;
+
+          // Check if any point of the shape is within selection box
+          const inBox = line.points.some(
+            (p) => p.x >= minX && p.x <= maxX && p.y >= minY && p.y <= maxY,
+          );
+
+          if (inBox) selected.add(index);
+        });
+
+        setSelectedShapes(selected);
+        setSelectionBox(null);
+      } else if (currentLine.length > 0 && selectedShape !== "eraser") {
         setLines((prev) => [
           ...prev,
           {
@@ -521,11 +709,81 @@ export function InfiniteCanvas() {
         e.preventDefault();
         setLines((prev) => prev.slice(0, -1));
       }
+
+      // Selection tool shortcuts
+      if (selectedShape === "select" && selectedShapes.size > 0) {
+        // Cmd/Ctrl + C to copy
+        if ((e.metaKey || e.ctrlKey) && e.key === "c") {
+          e.preventDefault();
+          const shapesToCopy = Array.from(selectedShapes).map((i) => lines[i]);
+          setClipboard(shapesToCopy);
+        }
+
+        // Cmd/Ctrl + V to paste
+        if ((e.metaKey || e.ctrlKey) && e.key === "v") {
+          e.preventDefault();
+          if (clipboard.length > 0) {
+            const offset = 20 / scale; // Offset for pasted shapes
+            const pastedShapes = clipboard.map((shape) => ({
+              ...shape,
+              points: shape.points.map((p) => ({
+                x: p.x + offset,
+                y: p.y + offset,
+              })),
+            }));
+
+            const startIndex = lines.length;
+            setLines((prev) => [...prev, ...pastedShapes]);
+
+            // Select the newly pasted shapes
+            const newSelection = new Set<number>();
+            for (let i = 0; i < pastedShapes.length; i++) {
+              newSelection.add(startIndex + i);
+            }
+            setSelectedShapes(newSelection);
+          }
+        }
+
+        // Delete or Backspace to delete selected shapes
+        if (e.key === "Delete" || e.key === "Backspace") {
+          e.preventDefault();
+          const indicesToDelete = Array.from(selectedShapes).sort(
+            (a, b) => b - a,
+          );
+          setLines((prev) => {
+            const newLines = [...prev];
+            indicesToDelete.forEach((index) => {
+              newLines.splice(index, 1);
+            });
+            return newLines;
+          });
+          setSelectedShapes(new Set());
+        }
+      }
+
+      // Cmd/Ctrl + V to paste even when not in select mode
+      if (
+        (e.metaKey || e.ctrlKey) &&
+        e.key === "v" &&
+        selectedShape !== "select" &&
+        clipboard.length > 0
+      ) {
+        e.preventDefault();
+        const offset = 20 / scale;
+        const pastedShapes = clipboard.map((shape) => ({
+          ...shape,
+          points: shape.points.map((p) => ({
+            x: p.x + offset,
+            y: p.y + offset,
+          })),
+        }));
+        setLines((prev) => [...prev, ...pastedShapes]);
+      }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [selectedShape, selectedShapes, clipboard, lines, scale]);
 
   return (
     <div
@@ -550,12 +808,36 @@ export function InfiniteCanvas() {
           cursor:
             selectedShape === "eraser"
               ? 'url(\'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><circle cx="16" cy="16" r="10" fill="none" stroke="white" stroke-width="2"/></svg>\') 16 16, auto'
-              : "crosshair",
+              : selectedShape === "select"
+                ? "default"
+                : "crosshair",
         }}
       />
 
       {/* Shape Toolbar */}
-      <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-gradient-to-r from-amber-500/90 to-yellow-500/90 backdrop-blur-sm px-4 py-2 rounded-lg shadow-lg flex gap-2">
+      <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-yellow-400/70 backdrop-blur-sm px-4 py-2 rounded-lg shadow-lg flex gap-2">
+        <button
+          onClick={() => setSelectedShape("select")}
+          className={`p-2 rounded transition-colors ${
+            selectedShape === "select"
+              ? "bg-white text-amber-600 shadow-md"
+              : "bg-black/20 text-white hover:bg-black/30"
+          }`}
+          title="Select"
+        >
+          <svg
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z" />
+          </svg>
+        </button>
         <button
           onClick={() => setSelectedShape("pen")}
           className={`p-2 rounded transition-colors ${
@@ -713,24 +995,10 @@ export function InfiniteCanvas() {
       </div>
 
       {/* Zoom indicator */}
-      <div className="absolute bottom-4 right-4 bg-white dark:bg-gray-800 px-4 py-2 rounded-lg shadow-lg">
-        <p className="text-sm text-gray-700 dark:text-gray-300">
+      <div className="absolute bottom-4 right-4 bg-yellow-400/70 backdrop-blur-sm px-4 py-2 rounded-lg shadow-lg">
+        <p className="text-sm text-gray-900 font-medium">
           Zoom: {Math.round(scale * 100)}%
         </p>
-      </div>
-
-      {/* Instructions */}
-      <div className="absolute top-4 left-4 bg-white dark:bg-gray-800 px-4 py-3 rounded-lg shadow-lg max-w-xs">
-        <p className="text-sm text-gray-700 dark:text-gray-300 mb-2">
-          <strong>Controls:</strong>
-        </p>
-        <ul className="text-xs text-gray-600 dark:text-gray-400 space-y-1">
-          <li>• Draw: Click and drag</li>
-          <li>• Pan: Cmd + drag, middle mouse, or two-finger drag</li>
-          <li>• Zoom: Pinch or Ctrl + scroll</li>
-          <li>• Undo: Cmd/Ctrl + Z</li>
-          <li>• Reset: Cmd/Ctrl + 0</li>
-        </ul>
       </div>
     </div>
   );
