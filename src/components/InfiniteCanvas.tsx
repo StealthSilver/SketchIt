@@ -18,6 +18,8 @@ type ShapeType =
   | "eraser"
   | "select";
 
+type StrokePattern = "solid" | "dashed" | "longDashed";
+
 interface DrawingLine {
   points: Point[];
   color: string;
@@ -25,6 +27,7 @@ interface DrawingLine {
   shape?: ShapeType;
   svgData?: string;
   svgSize?: { width: number; height: number };
+  strokePattern?: StrokePattern;
 }
 
 export function InfiniteCanvas() {
@@ -48,6 +51,7 @@ export function InfiniteCanvas() {
   const [isAIDrawerOpen, setIsAIDrawerOpen] = useState(false);
   const [lineColor, setLineColor] = useState("#fbbf24"); // Default amber color
   const [lineWidth, setLineWidth] = useState(2); // Default line width
+  const [strokePattern, setStrokePattern] = useState<StrokePattern>("solid"); // Default stroke pattern
   const userId = "default-user"; // Can be replaced with actual user ID from auth
 
   // Load canvas data from database on mount
@@ -355,6 +359,21 @@ export function InfiniteCanvas() {
     [],
   );
 
+  // Apply stroke pattern to context
+  const applyStrokePattern = useCallback(
+    (ctx: CanvasRenderingContext2D, pattern?: StrokePattern) => {
+      const currentPattern = pattern || "solid";
+      if (currentPattern === "dashed") {
+        ctx.setLineDash([10 / scale, 10 / scale]);
+      } else if (currentPattern === "longDashed") {
+        ctx.setLineDash([20 / scale, 10 / scale]);
+      } else {
+        ctx.setLineDash([]);
+      }
+    },
+    [scale],
+  );
+
   // Redraw the canvas
   const redraw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -386,6 +405,13 @@ export function InfiniteCanvas() {
       ctx.fillStyle = line.color;
 
       const shape = line.shape || "pen";
+
+      // Apply stroke pattern for shape tools (not for pen)
+      if (shape !== "pen") {
+        applyStrokePattern(ctx, line.strokePattern);
+      } else {
+        ctx.setLineDash([]);
+      }
 
       if (shape === "pen") {
         if (line.points.length < 2) return;
@@ -539,6 +565,13 @@ export function InfiniteCanvas() {
       ctx.lineJoin = "round";
       ctx.fillStyle = "#ffffff";
 
+      // Apply stroke pattern for preview (not for pen)
+      if (selectedShape !== "pen") {
+        applyStrokePattern(ctx, strokePattern);
+      } else {
+        ctx.setLineDash([]);
+      }
+
       if (selectedShape === "pen") {
         ctx.beginPath();
         ctx.moveTo(currentLine[0].x, currentLine[0].y);
@@ -617,6 +650,8 @@ export function InfiniteCanvas() {
     selectedShape,
     selectedShapes,
     selectionBox,
+    applyStrokePattern,
+    strokePattern,
   ]);
 
   // Handle canvas resize
@@ -772,6 +807,7 @@ export function InfiniteCanvas() {
             color: lineColor,
             width: lineWidth,
             shape: selectedShape,
+            strokePattern: strokePattern,
           },
         ]);
       }
@@ -1188,6 +1224,104 @@ export function InfiniteCanvas() {
               />
             </div>
           </div>
+
+          {/* Stroke Pattern - Only show for shape tools, not pen */}
+          {selectedShape !== "pen" && (
+            <div className="flex flex-col gap-2">
+              <label
+                className="text-sm font-medium"
+                style={{ color: "#fbbf24" }}
+              >
+                Stroke Pattern
+              </label>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setStrokePattern("solid")}
+                  className={`flex-1 px-3 py-2 rounded-lg border transition-all ${
+                    strokePattern === "solid"
+                      ? "border-[#fbbf24] bg-[#fbbf24]/20"
+                      : "border-white/20 bg-white/5 hover:border-white/40"
+                  }`}
+                  title="Solid"
+                >
+                  <svg
+                    width="100%"
+                    height="16"
+                    viewBox="0 0 60 16"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <line
+                      x1="0"
+                      y1="8"
+                      x2="60"
+                      y2="8"
+                      stroke={strokePattern === "solid" ? "#fbbf24" : "#ffffff"}
+                      strokeWidth="3"
+                    />
+                  </svg>
+                </button>
+                <button
+                  onClick={() => setStrokePattern("dashed")}
+                  className={`flex-1 px-3 py-2 rounded-lg border transition-all ${
+                    strokePattern === "dashed"
+                      ? "border-[#fbbf24] bg-[#fbbf24]/20"
+                      : "border-white/20 bg-white/5 hover:border-white/40"
+                  }`}
+                  title="Dashed"
+                >
+                  <svg
+                    width="100%"
+                    height="16"
+                    viewBox="0 0 60 16"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <line
+                      x1="0"
+                      y1="8"
+                      x2="60"
+                      y2="8"
+                      stroke={
+                        strokePattern === "dashed" ? "#fbbf24" : "#ffffff"
+                      }
+                      strokeWidth="3"
+                      strokeDasharray="8 8"
+                    />
+                  </svg>
+                </button>
+                <button
+                  onClick={() => setStrokePattern("longDashed")}
+                  className={`flex-1 px-3 py-2 rounded-lg border transition-all ${
+                    strokePattern === "longDashed"
+                      ? "border-[#fbbf24] bg-[#fbbf24]/20"
+                      : "border-white/20 bg-white/5 hover:border-white/40"
+                  }`}
+                  title="Long Dashed"
+                >
+                  <svg
+                    width="100%"
+                    height="16"
+                    viewBox="0 0 60 16"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <line
+                      x1="0"
+                      y1="8"
+                      x2="60"
+                      y2="8"
+                      stroke={
+                        strokePattern === "longDashed" ? "#fbbf24" : "#ffffff"
+                      }
+                      strokeWidth="3"
+                      strokeDasharray="16 8"
+                    />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
