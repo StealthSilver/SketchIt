@@ -50,10 +50,10 @@ export function InfiniteCanvas() {
   const [clipboard, setClipboard] = useState<DrawingLine[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAIDrawerOpen, setIsAIDrawerOpen] = useState(false);
-  const [lineColor, setLineColor] = useState("#fbbf24"); // Default amber color
+  const [lineColor, setLineColor] = useState("#ffffff"); // Default white color
   const [lineWidth, setLineWidth] = useState(2); // Default line width
   const [strokePattern, setStrokePattern] = useState<StrokePattern>("solid"); // Default stroke pattern
-  const [fillColor, setFillColor] = useState("transparent"); // Default fill color
+  const [fillColor, setFillColor] = useState("transparent"); // Default fill color (none)
   const userId = "default-user"; // Can be replaced with actual user ID from auth
 
   // Load canvas data from database on mount
