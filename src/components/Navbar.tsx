@@ -68,10 +68,7 @@ export function Navbar() {
           {/* Right Side: Theme Toggle and Get Started Button */}
           <div className="flex items-center gap-4">
             <ThemeToggle />
-            <Link
-              href="/get-started"
-              className="btn-primary text-sm px-6 py-2.5"
-            >
+            <Link href="/draw" className="btn-primary text-sm px-6 py-2.5">
               Get Started
             </Link>
           </div>

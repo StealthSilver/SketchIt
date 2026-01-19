@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import { Play, Sparkles, Pencil } from "lucide-react";
+import Link from "next/link";
 import AnimatedCanvas from "./AnimatedCanvas";
 
 export function Hero() {
@@ -67,14 +68,16 @@ export function Hero() {
             transition={{ duration: 0.8, delay: 0.3 }}
             className="flex flex-col sm:flex-row items-center justify-center gap-4"
           >
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              className="btn-primary flex items-center gap-2 text-lg px-8 py-4"
-            >
-              <Pencil className="w-5 h-5" />
-              Start Sketching
-            </motion.button>
+            <Link href="/draw">
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                className="btn-primary flex items-center gap-2 text-lg px-8 py-4"
+              >
+                <Pencil className="w-5 h-5" />
+                Start Sketching
+              </motion.button>
+            </Link>
 
             <motion.button
               whileHover={{ scale: 1.02 }}
