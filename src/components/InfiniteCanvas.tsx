@@ -46,6 +46,8 @@ export function InfiniteCanvas() {
   const [clipboard, setClipboard] = useState<DrawingLine[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAIDrawerOpen, setIsAIDrawerOpen] = useState(false);
+  const [lineColor, setLineColor] = useState("#fbbf24"); // Default amber color
+  const [lineWidth, setLineWidth] = useState(2); // Default line width
   const userId = "default-user"; // Can be replaced with actual user ID from auth
 
   // Load canvas data from database on mount
@@ -767,8 +769,8 @@ export function InfiniteCanvas() {
           ...prev,
           {
             points: currentLine,
-            color: "#ffffff",
-            width: 2,
+            color: lineColor,
+            width: lineWidth,
             shape: selectedShape,
           },
         ]);
@@ -1123,6 +1125,84 @@ export function InfiniteCanvas() {
           pointerEvents: "auto",
         }}
       >
+        {/* Line Customization Panel - Left Side */}
+        {selectedShape === "line" && (
+          <div
+            className="absolute left-6 top-1/2 transform -translate-y-1/2 flex flex-col gap-4 px-5 py-6 rounded-2xl backdrop-blur-md border border-white/10 shadow-2xl z-20"
+            style={{
+              background: "rgba(255, 255, 255, 0.05)",
+              pointerEvents: "auto",
+              minWidth: "220px",
+            }}
+          >
+            {/* Color Picker */}
+            <div className="flex flex-col gap-2">
+              <label
+                className="text-sm font-medium"
+                style={{ color: "#fbbf24" }}
+              >
+                Line Color
+              </label>
+              <div className="flex flex-col gap-2">
+                <input
+                  type="color"
+                  value={lineColor}
+                  onChange={(e) => setLineColor(e.target.value)}
+                  className="w-full h-10 rounded-lg cursor-pointer border border-white/20"
+                  style={{ background: "transparent" }}
+                />
+                <input
+                  type="text"
+                  value={lineColor}
+                  onChange={(e) => setLineColor(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg text-sm font-mono border border-white/20 bg-white/5 text-white focus:outline-none focus:border-[#fbbf24] transition-colors"
+                  placeholder="#fbbf24"
+                />
+              </div>
+            </div>
+
+            {/* Width Slider */}
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <label
+                  className="text-sm font-medium"
+                  style={{ color: "#fbbf24" }}
+                >
+                  Line Width
+                </label>
+                <span className="text-xs font-medium text-white/60">
+                  {lineWidth}px
+                </span>
+              </div>
+              <input
+                type="range"
+                min="1"
+                max="20"
+                step="1"
+                value={lineWidth}
+                onChange={(e) => setLineWidth(Number(e.target.value))}
+                className="w-full h-2 rounded-lg appearance-none cursor-pointer"
+                style={{
+                  background: `linear-gradient(to right, #fbbf24 0%, #fbbf24 ${((lineWidth - 1) / 19) * 100}%, rgba(255, 255, 255, 0.1) ${((lineWidth - 1) / 19) * 100}%, rgba(255, 255, 255, 0.1) 100%)`,
+                }}
+              />
+              {/* Width Preview */}
+              <div className="flex items-center justify-center py-3">
+                <div
+                  style={{
+                    width: "100%",
+                    height: `${lineWidth}px`,
+                    background: lineColor,
+                    borderRadius: "2px",
+                    maxHeight: "20px",
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Center Toolbar - Shape Tools */}
         <button
           onClick={() => setSelectedShape("select")}
           className={`p-2.5 rounded-full transition-all ${
