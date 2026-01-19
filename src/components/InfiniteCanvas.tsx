@@ -28,6 +28,7 @@ interface DrawingLine {
   svgData?: string;
   svgSize?: { width: number; height: number };
   strokePattern?: StrokePattern;
+  fillColor?: string;
 }
 
 export function InfiniteCanvas() {
@@ -52,6 +53,7 @@ export function InfiniteCanvas() {
   const [lineColor, setLineColor] = useState("#fbbf24"); // Default amber color
   const [lineWidth, setLineWidth] = useState(2); // Default line width
   const [strokePattern, setStrokePattern] = useState<StrokePattern>("solid"); // Default stroke pattern
+  const [fillColor, setFillColor] = useState("transparent"); // Default fill color
   const userId = "default-user"; // Can be replaced with actual user ID from auth
 
   // Load canvas data from database on mount
@@ -433,6 +435,10 @@ export function InfiniteCanvas() {
         const end = line.points[line.points.length - 1];
         const width = end.x - start.x;
         const height = end.y - start.y;
+        if (line.fillColor && line.fillColor !== "transparent") {
+          ctx.fillStyle = line.fillColor;
+          ctx.fillRect(start.x, start.y, width, height);
+        }
         ctx.strokeRect(start.x, start.y, width, height);
       } else if (shape === "circle" && line.points.length >= 2) {
         const start = line.points[0];
@@ -442,6 +448,10 @@ export function InfiniteCanvas() {
         );
         ctx.beginPath();
         ctx.arc(start.x, start.y, radius, 0, 2 * Math.PI);
+        if (line.fillColor && line.fillColor !== "transparent") {
+          ctx.fillStyle = line.fillColor;
+          ctx.fill();
+        }
         ctx.stroke();
       } else if (shape === "triangle" && line.points.length >= 2) {
         const start = line.points[0];
@@ -453,6 +463,10 @@ export function InfiniteCanvas() {
         ctx.lineTo(start.x, start.y + height);
         ctx.lineTo(start.x + width, start.y + height);
         ctx.closePath();
+        if (line.fillColor && line.fillColor !== "transparent") {
+          ctx.fillStyle = line.fillColor;
+          ctx.fill();
+        }
         ctx.stroke();
       } else if (shape === "arrow" && line.points.length >= 2) {
         const start = line.points[0];
@@ -591,6 +605,10 @@ export function InfiniteCanvas() {
         const end = currentLine[currentLine.length - 1];
         const width = end.x - start.x;
         const height = end.y - start.y;
+        if (fillColor && fillColor !== "transparent") {
+          ctx.fillStyle = fillColor;
+          ctx.fillRect(start.x, start.y, width, height);
+        }
         ctx.strokeRect(start.x, start.y, width, height);
       } else if (selectedShape === "circle" && currentLine.length >= 2) {
         const start = currentLine[0];
@@ -600,6 +618,10 @@ export function InfiniteCanvas() {
         );
         ctx.beginPath();
         ctx.arc(start.x, start.y, radius, 0, 2 * Math.PI);
+        if (fillColor && fillColor !== "transparent") {
+          ctx.fillStyle = fillColor;
+          ctx.fill();
+        }
         ctx.stroke();
       } else if (selectedShape === "triangle" && currentLine.length >= 2) {
         const start = currentLine[0];
@@ -611,6 +633,10 @@ export function InfiniteCanvas() {
         ctx.lineTo(start.x, start.y + height);
         ctx.lineTo(start.x + width, start.y + height);
         ctx.closePath();
+        if (fillColor && fillColor !== "transparent") {
+          ctx.fillStyle = fillColor;
+          ctx.fill();
+        }
         ctx.stroke();
       } else if (selectedShape === "arrow" && currentLine.length >= 2) {
         const start = currentLine[0];
@@ -808,6 +834,9 @@ export function InfiniteCanvas() {
             width: lineWidth,
             shape: selectedShape,
             strokePattern: strokePattern,
+            fillColor: ["square", "triangle", "circle"].includes(selectedShape)
+              ? fillColor
+              : undefined,
           },
         ]);
       }
@@ -1163,7 +1192,7 @@ export function InfiniteCanvas() {
             minWidth: "220px",
           }}
         >
-          {/* Color Picker */}
+          {/* Stroke Color Picker */}
           <div className="flex flex-col gap-2">
             <label className="text-sm font-medium" style={{ color: "#fbbf24" }}>
               Stroke Color
@@ -1185,6 +1214,54 @@ export function InfiniteCanvas() {
               />
             </div>
           </div>
+
+          {/* Fill Color Picker - Only for closed shapes */}
+          {["square", "triangle", "circle"].includes(selectedShape) && (
+            <div className="flex flex-col gap-2">
+              <label
+                className="text-sm font-medium"
+                style={{ color: "#fbbf24" }}
+              >
+                Fill Color
+              </label>
+              <div className="flex flex-col gap-2">
+                <div className="flex gap-2 items-center">
+                  <input
+                    type="color"
+                    value={fillColor === "transparent" ? "#ffffff" : fillColor}
+                    onChange={(e) => setFillColor(e.target.value)}
+                    disabled={fillColor === "transparent"}
+                    className="flex-1 h-10 rounded-lg cursor-pointer border border-white/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{ background: "transparent" }}
+                  />
+                  <button
+                    onClick={() =>
+                      setFillColor(
+                        fillColor === "transparent" ? "#ffffff" : "transparent",
+                      )
+                    }
+                    className="px-3 py-2 rounded-lg text-xs font-medium border border-white/20 bg-white/5 text-white hover:bg-white/10 transition-colors"
+                    title={
+                      fillColor === "transparent"
+                        ? "Enable fill"
+                        : "Disable fill"
+                    }
+                  >
+                    {fillColor === "transparent" ? "None" : "Clear"}
+                  </button>
+                </div>
+                {fillColor !== "transparent" && (
+                  <input
+                    type="text"
+                    value={fillColor}
+                    onChange={(e) => setFillColor(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg text-sm font-mono border border-white/20 bg-white/5 text-white focus:outline-none focus:border-[#fbbf24] transition-colors"
+                    placeholder="#ffffff"
+                  />
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Width Slider */}
           <div className="flex flex-col gap-2">
