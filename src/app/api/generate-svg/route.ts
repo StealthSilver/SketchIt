@@ -86,29 +86,32 @@ export async function POST(request: Request) {
         apiKey: apiKey,
       });
 
-      const systemPrompt = `You are an expert diagram structure generator. Your job is to create a structured JSON diagram mapping using only basic shapes: square, rectangle, and circle.
+      const systemPrompt = `You are an expert diagram structure generator. Your job is to create a structured JSON diagram mapping using only basic shapes: square, rectangle, circle, and triangle.
 
 CRITICAL RULES:
 1. Return ONLY valid JSON - no markdown, no code blocks, no explanations
-2. Use ONLY these shape types: "square", "rectangle", "circle", "triangle
+2. Use ONLY these shape types: "square", "rectangle", "circle", "triangle"
 3. For squares: use "size" and "bottomLeft" coordinates
 4. For rectangles: use "width", "height", and "bottomLeft" coordinates
 5. For circles: use "radius" and "center" coordinates
-6. Position shapes appropriately to form the requested diagram
-7. Use a coordinate system where (0,0) is bottom-left, typical canvas size is 400x400
-8. Make shapes proportional and well-positioned to clearly represent the diagram
+6. For triangles: use "base", "height", and "bottomLeft" coordinates (triangle points upward)
+7. Position shapes appropriately to form the requested diagram
+8. Use a coordinate system where (0,0) is bottom-left, typical canvas size is 400x400
+9. Make shapes proportional and well-positioned to clearly represent the diagram
 
 Return format:
 {
   "shapes": [
     {
       "id": "unique_id",
-      "type": "rectangle" | "square" | "circle" | "triangle, 
+      "type": "rectangle" | "square" | "circle" | "triangle",
       "width": number (for rectangle),
       "height": number (for rectangle),
       "size": number (for square),
       "radius": number (for circle),
-      "bottomLeft": { "x": number, "y": number } (for square/rectangle),
+      "base": number (for triangle),
+      "height": number (for triangle),
+      "bottomLeft": { "x": number, "y": number } (for square/rectangle/triangle),
       "center": { "x": number, "y": number } (for circle)
     }
   ]
@@ -116,7 +119,7 @@ Return format:
 
       const userPrompt = `Create a diagram mapping for: ${prompt}
 
-Use only square, rectangle, and circle shapes. Position them to clearly represent a ${prompt}.
+Use only square, rectangle, circle, and triangle shapes. Position them to clearly represent a ${prompt}.
 Return ONLY the JSON object with the shapes array.`;
 
       console.log("Sending request to OpenAI...");
@@ -185,12 +188,19 @@ Return ONLY the JSON object with the shapes array.`;
 
       // Validate each shape
       const validShapes = diagramData.shapes.filter((shape: any) => {
-        const hasValidType = ["square", "rectangle", "circle"].includes(
-          shape.type,
-        );
+        const hasValidType = [
+          "square",
+          "rectangle",
+          "circle",
+          "triangle",
+        ].includes(shape.type);
         const hasValidCoords =
           (shape.type === "circle" && shape.radius && shape.center) ||
           ((shape.type === "square" || shape.type === "rectangle") &&
+            shape.bottomLeft) ||
+          (shape.type === "triangle" &&
+            shape.base &&
+            shape.height &&
             shape.bottomLeft);
 
         if (!hasValidType || !hasValidCoords) {

@@ -11,11 +11,12 @@ interface AIDrawerProps {
 
 interface DiagramShape {
   id: string;
-  type: "square" | "rectangle" | "circle";
+  type: "square" | "rectangle" | "circle" | "triangle";
   width?: number;
   height?: number;
   size?: number;
   radius?: number;
+  base?: number;
   bottomLeft?: { x: number; y: number };
   center?: { x: number; y: number };
 }

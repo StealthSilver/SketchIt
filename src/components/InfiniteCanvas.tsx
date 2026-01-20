@@ -1443,11 +1443,12 @@ export function InfiniteCanvas() {
   // Handle AI-generated SVG
   interface DiagramShape {
     id: string;
-    type: "square" | "rectangle" | "circle";
+    type: "square" | "rectangle" | "circle" | "triangle";
     width?: number;
     height?: number;
     size?: number;
     radius?: number;
+    base?: number;
     bottomLeft?: { x: number; y: number };
     center?: { x: number; y: number };
   }
@@ -1527,6 +1528,25 @@ export function InfiniteCanvas() {
               { x: centerPosX + shape.radius, y: centerPosY },
             ];
             shapeType = "circle";
+            processedCount++;
+          } else if (
+            shape.type === "triangle" &&
+            shape.base &&
+            shape.height &&
+            shape.bottomLeft
+          ) {
+            // Triangle: draw from bottomLeft corner, points upward
+            const x = shape.bottomLeft.x + diagramOffsetX;
+            const y =
+              canvas.height / scale - (shape.bottomLeft.y + diagramOffsetY); // Flip Y
+            const topX = x + shape.base / 2; // Top point at center of base
+            const topY = y - shape.height; // Top point above base
+
+            points = [
+              { x, y }, // Bottom left corner
+              { x: topX, y: topY }, // Top point (will be used as second point for triangle)
+            ];
+            shapeType = "triangle";
             processedCount++;
           } else {
             console.warn(
