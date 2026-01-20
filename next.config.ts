@@ -11,9 +11,6 @@ const nextConfig: NextConfig = {
     formats: ["image/webp"],
   },
 
-  // Enable SWC minification
-  swcMinify: true,
-
   // Optimize bundle
   experimental: {
     optimizePackageImports: ["framer-motion", "lucide-react"],
