@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import OpenAI from "openai";
 
 export async function POST(request: Request) {
   try {
@@ -12,29 +12,28 @@ export async function POST(request: Request) {
       );
     }
 
-    // Using Google Gemini (FREE!)
-    const apiKey = process.env.GOOGLE_API_KEY;
+    // Using OpenAI GPT-4o-mini (affordable and fast)
+    const apiKey = process.env.OPENAI_API_KEY;
 
     if (!apiKey) {
       return NextResponse.json(
         {
           error:
-            "API key not configured. Please add GOOGLE_API_KEY to your .env file. Get free key at: https://aistudio.google.com/app/apikey",
+            "API key not configured. Please add OPENAI_API_KEY to your .env file. Get your key at: https://platform.openai.com/api-keys",
         },
         { status: 500 },
       );
     }
 
     try {
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({
-        model: "gemini-1.5-flash",
+      const openai = new OpenAI({
+        apiKey: apiKey,
       });
 
-      const fullPrompt = `You are an expert diagram structure generator. Your job is to create a structured JSON diagram mapping using only basic shapes: square, rectangle, and circle.
+      const systemPrompt = `You are an expert diagram structure generator. Your job is to create a structured JSON diagram mapping using only basic shapes: square, rectangle, and circle.
 
 CRITICAL RULES:
-1. Return ONLY valid JSON - no markdown, no code blocks, no explanations, no text before or after the JSON
+1. Return ONLY valid JSON - no markdown, no code blocks, no explanations
 2. Use ONLY these shape types: "square", "rectangle", "circle"
 3. For squares: use "size" and "bottomLeft" coordinates
 4. For rectangles: use "width", "height", and "bottomLeft" coordinates
@@ -43,104 +42,166 @@ CRITICAL RULES:
 7. Use a coordinate system where (0,0) is bottom-left, typical canvas size is 400x400
 8. Make shapes proportional and well-positioned to clearly represent the diagram
 
-Example format:
+Return format:
 {
   "shapes": [
     {
-      "id": "base",
-      "type": "rectangle",
-      "width": 200,
-      "height": 150,
-      "bottomLeft": { "x": 100, "y": 100 }
-    },
-    {
-      "id": "element",
-      "type": "square",
-      "size": 40,
-      "bottomLeft": { "x": 180, "y": 180 }
-    },
-    {
-      "id": "detail",
-      "type": "circle",
-      "radius": 5,
-      "center": { "x": 200, "y": 200 }
+      "id": "unique_id",
+      "type": "rectangle" | "square" | "circle",
+      "width": number (for rectangle),
+      "height": number (for rectangle),
+      "size": number (for square),
+      "radius": number (for circle),
+      "bottomLeft": { "x": number, "y": number } (for square/rectangle),
+      "center": { "x": number, "y": number } (for circle)
     }
   ]
-}
+}`;
 
-Task: I want you to give me a diagram mapping for creating a ${prompt} diagram. You can only use square, rectangle and circle. I need the format like square - size - coordinates. So that after all the shapes are drawn they resemble the final diagram of a ${prompt}.
+      const userPrompt = `Create a diagram mapping for: ${prompt}
 
-Remember: Return ONLY the JSON object, nothing else.`;
+Use only square, rectangle, and circle shapes. Position them to clearly represent a ${prompt}.
+Return ONLY the JSON object with the shapes array.`;
 
-      const result = await model.generateContent(fullPrompt);
+      console.log("Sending request to OpenAI...");
 
-      const response = result.response;
-      let responseText = response.text().trim();
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: systemPrompt,
+          },
+          {
+            role: "user",
+            content: userPrompt,
+          },
+        ],
+        temperature: 0.7,
+        max_tokens: 2000,
+        response_format: { type: "json_object" }, // Force JSON response
+      });
+
+      const responseText = completion.choices[0]?.message?.content;
 
       if (!responseText) {
+        console.error("No response from OpenAI");
         return NextResponse.json(
-          { error: "No response from Gemini" },
+          { error: "No response from OpenAI" },
           { status: 500 },
         );
       }
 
-      // Clean up the response - remove markdown code blocks if present
-      responseText = responseText
-        .replace(/```json\n?/g, "")
-        .replace(/```\n?/g, "")
-        .trim();
+      console.log("OpenAI Response:", responseText);
 
       // Parse and validate JSON
       let diagramData;
       try {
         diagramData = JSON.parse(responseText);
+        console.log("Parsed diagram data:", diagramData);
       } catch (parseError) {
         console.error("JSON parse error:", parseError);
         console.error("Response text:", responseText);
         return NextResponse.json(
-          { error: "Invalid JSON response from AI" },
+          {
+            error: "Invalid JSON response from AI",
+            details: responseText.substring(0, 200),
+          },
           { status: 500 },
         );
       }
 
+      // Validate the structure
       if (!diagramData.shapes || !Array.isArray(diagramData.shapes)) {
+        console.error("Invalid structure:", diagramData);
         return NextResponse.json(
-          { error: "Invalid diagram structure returned" },
+          {
+            error: "Invalid diagram structure - missing shapes array",
+            received: diagramData,
+          },
           { status: 500 },
         );
       }
 
-      return NextResponse.json({ diagram: diagramData });
-    } catch (error: any) {
-      console.error("Gemini API Error:", error);
+      // Validate each shape
+      const validShapes = diagramData.shapes.filter((shape: any) => {
+        const hasValidType = ["square", "rectangle", "circle"].includes(
+          shape.type,
+        );
+        const hasValidCoords =
+          (shape.type === "circle" && shape.radius && shape.center) ||
+          ((shape.type === "square" || shape.type === "rectangle") &&
+            shape.bottomLeft);
 
-      // Handle specific Gemini errors
-      if (error.message?.includes("API_KEY_INVALID")) {
+        if (!hasValidType || !hasValidCoords) {
+          console.warn("Invalid shape filtered out:", shape);
+          return false;
+        }
+        return true;
+      });
+
+      if (validShapes.length === 0) {
+        console.error("No valid shapes in response");
+        return NextResponse.json(
+          { error: "No valid shapes generated" },
+          { status: 500 },
+        );
+      }
+
+      console.log(`Successfully generated ${validShapes.length} valid shapes`);
+
+      return NextResponse.json({
+        diagram: { shapes: validShapes },
+        debug: {
+          totalShapes: diagramData.shapes.length,
+          validShapes: validShapes.length,
+          filteredOut: diagramData.shapes.length - validShapes.length,
+        },
+      });
+    } catch (error: any) {
+      console.error("OpenAI API Error:", error);
+
+      // Handle specific OpenAI errors
+      if (error.status === 401) {
         return NextResponse.json(
           {
             error:
-              "Invalid API key. Get a free key at: https://aistudio.google.com/app/apikey",
+              "Invalid API key. Get your key at: https://platform.openai.com/api-keys",
           },
           { status: 401 },
         );
       }
 
-      if (error.message?.includes("RATE_LIMIT")) {
+      if (error.status === 429) {
+        const retryAfter = error.headers?.["retry-after"] || "60";
         return NextResponse.json(
           {
-            error:
-              "Rate limit exceeded. Please wait a moment. Free tier: 15 requests/minute.",
+            error: `Rate limit exceeded. Please wait ${retryAfter} seconds before trying again.`,
+            retryAfter: retryAfter,
           },
           { status: 429 },
         );
       }
 
+      if (error.status === 402) {
+        return NextResponse.json(
+          {
+            error:
+              "Insufficient OpenAI credits. Please add credits to your account.",
+          },
+          { status: 402 },
+        );
+      }
+
       throw error;
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error generating diagram:", error);
     return NextResponse.json(
-      { error: "Internal server error" },
+      {
+        error: "Internal server error",
+        details: error.message || "Unknown error",
+      },
       { status: 500 },
     );
   }

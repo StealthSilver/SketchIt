@@ -28,6 +28,7 @@ export function AIDrawer({
   const [prompt, setPrompt] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const [retryCount, setRetryCount] = useState(0);
   const [lastRequestTime, setLastRequestTime] = useState(0);
   const [cooldownRemaining, setCooldownRemaining] = useState(0);
@@ -62,10 +63,13 @@ export function AIDrawer({
 
     setIsGenerating(true);
     setError("");
+    setSuccess("");
     setLastRequestTime(now);
     setCooldownRemaining(COOLDOWN_SECONDS);
 
     try {
+      console.log("Sending request to generate diagram for:", prompt);
+
       const response = await fetch("/api/generate-svg", {
         method: "POST",
         headers: {
@@ -75,28 +79,65 @@ export function AIDrawer({
       });
 
       const data = await response.json();
+      console.log("API Response:", data);
 
       if (!response.ok) {
         // Handle rate limiting with specific message
         if (response.status === 429) {
+          const retryTime = data.retryAfter || "a moment";
           const retryMessage =
-            data.retryAfter ||
-            "Rate limit exceeded. Please wait a moment and try again.";
+            data.error ||
+            `Rate limit exceeded. Please wait ${retryTime} before trying again.`;
           throw new Error(retryMessage);
         }
         throw new Error(data.error || "Failed to generate diagram");
       }
 
-      if (data.diagram && data.diagram.shapes) {
-        // Pass the shapes to the canvas to draw
-        onDiagramGenerated(data.diagram.shapes);
+      // Check if we have valid diagram data
+      if (!data.diagram) {
+        console.error("No diagram in response:", data);
+        throw new Error("Invalid response format - no diagram data");
+      }
+
+      if (!data.diagram.shapes || !Array.isArray(data.diagram.shapes)) {
+        console.error("Invalid shapes array:", data.diagram);
+        throw new Error("Invalid response format - shapes must be an array");
+      }
+
+      if (data.diagram.shapes.length === 0) {
+        throw new Error("No shapes were generated. Try a different prompt.");
+      }
+
+      console.log(
+        `Generated ${data.diagram.shapes.length} shapes:`,
+        data.diagram.shapes,
+      );
+
+      // Show success message with debug info
+      if (data.debug) {
+        setSuccess(
+          `Successfully generated ${data.debug.validShapes} shapes${data.debug.filteredOut > 0 ? ` (${data.debug.filteredOut} invalid shapes filtered)` : ""}`,
+        );
+      } else {
+        setSuccess(
+          `Successfully generated ${data.diagram.shapes.length} shapes`,
+        );
+      }
+
+      // Pass the shapes to the canvas to draw
+      onDiagramGenerated(data.diagram.shapes);
+
+      // Clear prompt and close after a short delay
+      setTimeout(() => {
         setPrompt("");
         setRetryCount(0);
+        setSuccess("");
         onClose();
-      }
+      }, 1500);
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : "An error occurred";
+      console.error("Generation error:", errorMessage);
       setError(errorMessage);
 
       // Only increment retry count for rate limit errors
@@ -262,6 +303,37 @@ export function AIDrawer({
                         </div>
                       )}
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Success Message */}
+              {success && (
+                <div
+                  className="p-4 rounded-lg border"
+                  style={{
+                    background: "rgba(34, 197, 94, 0.1)",
+                    borderColor: "rgba(34, 197, 94, 0.3)",
+                  }}
+                >
+                  <div className="flex items-start gap-3">
+                    <svg
+                      className="w-5 h-5 shrink-0 mt-0.5"
+                      fill="#22c55e"
+                      viewBox="0 0 20 20"
+                    >
+                      <path
+                        fillRule="evenodd"
+                        d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                    <p
+                      className="text-sm font-medium"
+                      style={{ color: "#22c55e" }}
+                    >
+                      {success}
+                    </p>
                   </div>
                 </div>
               )}

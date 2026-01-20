@@ -991,7 +991,12 @@ export function InfiniteCanvas() {
   const handleDiagramGenerated = (shapes: DiagramShape[]) => {
     try {
       const canvas = canvasRef.current;
-      if (!canvas) return;
+      if (!canvas) {
+        console.error("Canvas not found");
+        return;
+      }
+
+      console.log("Processing diagram with", shapes.length, "shapes:", shapes);
 
       // Calculate center offset for the diagram
       const centerX = (canvas.width / 2 - offset.x) / scale;
@@ -1002,72 +1007,111 @@ export function InfiniteCanvas() {
       const diagramOffsetY = centerY - 200;
 
       const newLines: DrawingLine[] = [];
+      let processedCount = 0;
+      let skippedCount = 0;
 
-      shapes.forEach((shape) => {
-        let points: Point[] = [];
-        let shapeType: ShapeType = "square";
+      shapes.forEach((shape, index) => {
+        try {
+          let points: Point[] = [];
+          let shapeType: ShapeType = "square";
 
-        if (
-          shape.type === "rectangle" &&
-          shape.width &&
-          shape.height &&
-          shape.bottomLeft
-        ) {
-          // Rectangle: draw from bottomLeft
-          const x = shape.bottomLeft.x + diagramOffsetX;
-          const y =
-            canvas.height / scale - (shape.bottomLeft.y + diagramOffsetY); // Flip Y
-          const endX = x + shape.width;
-          const endY = y - shape.height; // Negative because Y is flipped
+          if (
+            shape.type === "rectangle" &&
+            shape.width &&
+            shape.height &&
+            shape.bottomLeft
+          ) {
+            // Rectangle: draw from bottomLeft
+            const x = shape.bottomLeft.x + diagramOffsetX;
+            const y =
+              canvas.height / scale - (shape.bottomLeft.y + diagramOffsetY); // Flip Y
+            const endX = x + shape.width;
+            const endY = y - shape.height; // Negative because Y is flipped
 
-          points = [
-            { x, y },
-            { x: endX, y: endY },
-          ];
-          shapeType = "square"; // Use square shape for rectangles
-        } else if (shape.type === "square" && shape.size && shape.bottomLeft) {
-          // Square: draw from bottomLeft
-          const x = shape.bottomLeft.x + diagramOffsetX;
-          const y =
-            canvas.height / scale - (shape.bottomLeft.y + diagramOffsetY); // Flip Y
-          const endX = x + shape.size;
-          const endY = y - shape.size; // Negative because Y is flipped
+            points = [
+              { x, y },
+              { x: endX, y: endY },
+            ];
+            shapeType = "square"; // Use square shape for rectangles
+            processedCount++;
+          } else if (
+            shape.type === "square" &&
+            shape.size &&
+            shape.bottomLeft
+          ) {
+            // Square: draw from bottomLeft
+            const x = shape.bottomLeft.x + diagramOffsetX;
+            const y =
+              canvas.height / scale - (shape.bottomLeft.y + diagramOffsetY); // Flip Y
+            const endX = x + shape.size;
+            const endY = y - shape.size; // Negative because Y is flipped
 
-          points = [
-            { x, y },
-            { x: endX, y: endY },
-          ];
-          shapeType = "square";
-        } else if (shape.type === "circle" && shape.radius && shape.center) {
-          // Circle: draw from center, with radius as distance to edge
-          const centerPosX = shape.center.x + diagramOffsetX;
-          const centerPosY =
-            canvas.height / scale - (shape.center.y + diagramOffsetY); // Flip Y
+            points = [
+              { x, y },
+              { x: endX, y: endY },
+            ];
+            shapeType = "square";
+            processedCount++;
+          } else if (shape.type === "circle" && shape.radius && shape.center) {
+            // Circle: draw from center, with radius as distance to edge
+            const centerPosX = shape.center.x + diagramOffsetX;
+            const centerPosY =
+              canvas.height / scale - (shape.center.y + diagramOffsetY); // Flip Y
 
-          points = [
-            { x: centerPosX, y: centerPosY },
-            { x: centerPosX + shape.radius, y: centerPosY },
-          ];
-          shapeType = "circle";
-        }
+            points = [
+              { x: centerPosX, y: centerPosY },
+              { x: centerPosX + shape.radius, y: centerPosY },
+            ];
+            shapeType = "circle";
+            processedCount++;
+          } else {
+            console.warn(
+              `Shape ${index + 1} skipped - invalid structure:`,
+              shape,
+            );
+            skippedCount++;
+            return;
+          }
 
-        if (points.length >= 2) {
-          const newLine: DrawingLine = {
-            points,
-            color: lineColor,
-            width: lineWidth,
-            shape: shapeType,
-            strokePattern: "solid",
-            fillColor: "transparent",
-          };
-          newLines.push(newLine);
+          if (points.length >= 2) {
+            const newLine: DrawingLine = {
+              points,
+              color: lineColor,
+              width: lineWidth,
+              shape: shapeType,
+              strokePattern: "solid",
+              fillColor: "transparent",
+            };
+            newLines.push(newLine);
+            console.log(`Shape ${index + 1} (${shape.type}) added:`, {
+              id: shape.id,
+              points,
+              shapeType,
+            });
+          }
+        } catch (shapeError) {
+          console.error(
+            `Error processing shape ${index + 1}:`,
+            shapeError,
+            shape,
+          );
+          skippedCount++;
         }
       });
+
+      if (newLines.length === 0) {
+        console.error(
+          "No valid shapes could be generated from the diagram data",
+        );
+        return;
+      }
 
       // Add all shapes to the canvas
       setLines((prev) => [...prev, ...newLines]);
 
-      console.log(`Generated ${newLines.length} shapes from diagram`);
+      console.log(
+        `✅ Diagram generation complete: ${processedCount} shapes processed, ${skippedCount} skipped, ${newLines.length} added to canvas`,
+      );
     } catch (error) {
       console.error("Error handling diagram:", error);
     }
