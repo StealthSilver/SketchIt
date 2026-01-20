@@ -65,19 +65,52 @@ export function InfiniteCanvas() {
   const [cursorStyle, setCursorStyle] = useState("crosshair");
   const userId = "default-user"; // Can be replaced with actual user ID from auth
 
-  // Load canvas data from database on mount
+  // Load canvas data from database on mount with localStorage fallback
   useEffect(() => {
     const loadCanvas = async () => {
       try {
-        const response = await fetch(`/api/canvas?userId=${userId}`);
+        // First, try to load from localStorage immediately for instant display
+        const localData = localStorage.getItem(`canvas_${userId}`);
+        if (localData) {
+          const parsed = JSON.parse(localData);
+          setLines(parsed);
+          console.log(
+            "Loaded canvas from localStorage:",
+            parsed.length,
+            "lines",
+          );
+        }
+
+        // Then fetch from database with timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+
+        const response = await fetch(`/api/canvas?userId=${userId}`, {
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+
         const result = await response.json();
 
         if (result.success && result.data.lines) {
-          console.log("Loaded canvas data:", result.data.lines.length, "lines");
+          console.log(
+            "Loaded canvas from DB:",
+            result.data.lines.length,
+            "lines",
+          );
           setLines(result.data.lines);
+          // Update localStorage with DB data
+          localStorage.setItem(
+            `canvas_${userId}`,
+            JSON.stringify(result.data.lines),
+          );
         }
       } catch (error) {
-        console.error("Error loading canvas:", error);
+        console.error(
+          "Error loading canvas from DB, using localStorage:",
+          error,
+        );
+        // If DB fails, keep using localStorage data already loaded above
       } finally {
         setIsLoading(false);
       }
@@ -86,13 +119,20 @@ export function InfiniteCanvas() {
     loadCanvas();
   }, [userId]);
 
-  // Save canvas data to database (with debounce)
+  // Save canvas data to localStorage and database (with debounce)
   useEffect(() => {
     if (isLoading) return; // Don't save while loading
 
     const saveCanvas = async () => {
       try {
-        console.log("Saving canvas with", lines.length, "lines");
+        // Save to localStorage immediately (instant, reliable)
+        localStorage.setItem(`canvas_${userId}`, JSON.stringify(lines));
+        console.log("Saved canvas to localStorage:", lines.length, "lines");
+
+        // Then save to database with timeout and retry
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
+
         await fetch("/api/canvas", {
           method: "POST",
           headers: {
@@ -102,9 +142,13 @@ export function InfiniteCanvas() {
             userId,
             lines,
           }),
+          signal: controller.signal,
         });
+        clearTimeout(timeoutId);
+        console.log("Saved canvas to DB:", lines.length, "lines");
       } catch (error) {
-        console.error("Error saving canvas:", error);
+        console.error("Error saving canvas to DB (localStorage saved):", error);
+        // Canvas is still saved in localStorage, so user won't lose data
       }
     };
 
@@ -118,9 +162,12 @@ export function InfiniteCanvas() {
 
   // Save before page unload
   useEffect(() => {
-    const handleBeforeUnload = async () => {
+    const handleBeforeUnload = () => {
       if (lines.length > 0) {
-        // Use sendBeacon for reliable save on unload
+        // Save to localStorage first (synchronous, guaranteed)
+        localStorage.setItem(`canvas_${userId}`, JSON.stringify(lines));
+
+        // Try to save to DB as well using sendBeacon
         const blob = new Blob(
           [
             JSON.stringify({
