@@ -1671,7 +1671,8 @@ export function InfiniteCanvas() {
       </div>
 
       {/* Drawing Tool Customization Panel - Left Side */}
-      {selectedShape !== "select" && selectedShape !== "eraser" && (
+      {(selectedShape !== "select" && selectedShape !== "eraser") ||
+      selectedShapeIndex !== null ? (
         <div
           className="absolute left-6 top-1/2 transform -translate-y-1/2 flex flex-col gap-4 px-5 py-6 rounded-2xl backdrop-blur-md border border-white/10 shadow-2xl z-20"
           style={{
@@ -1680,6 +1681,10 @@ export function InfiniteCanvas() {
             minWidth: "220px",
           }}
         >
+          {/* Title */}
+          <div className="text-sm font-semibold text-[#fbbf24] border-b border-white/10 pb-2">
+            {selectedShapeIndex !== null ? "Edit Shape" : "New Shape"}
+          </div>
           {/* Stroke Color Picker */}
           <div className="flex flex-col gap-2">
             <label className="text-sm font-medium" style={{ color: "#fbbf24" }}>
@@ -1688,15 +1693,57 @@ export function InfiniteCanvas() {
             <div className="flex flex-col gap-2">
               <input
                 type="color"
-                value={lineColor}
-                onChange={(e) => setLineColor(e.target.value)}
+                value={
+                  selectedShapeIndex !== null &&
+                  selectedShapeIndex < lines.length
+                    ? lines[selectedShapeIndex].color
+                    : lineColor
+                }
+                onChange={(e) => {
+                  if (
+                    selectedShapeIndex !== null &&
+                    selectedShapeIndex < lines.length
+                  ) {
+                    setLines((prev) => {
+                      const newLines = [...prev];
+                      newLines[selectedShapeIndex] = {
+                        ...newLines[selectedShapeIndex],
+                        color: e.target.value,
+                      };
+                      return newLines;
+                    });
+                  } else {
+                    setLineColor(e.target.value);
+                  }
+                }}
                 className="w-full h-10 rounded-lg cursor-pointer border border-white/20"
                 style={{ background: "transparent" }}
               />
               <input
                 type="text"
-                value={lineColor}
-                onChange={(e) => setLineColor(e.target.value)}
+                value={
+                  selectedShapeIndex !== null &&
+                  selectedShapeIndex < lines.length
+                    ? lines[selectedShapeIndex].color
+                    : lineColor
+                }
+                onChange={(e) => {
+                  if (
+                    selectedShapeIndex !== null &&
+                    selectedShapeIndex < lines.length
+                  ) {
+                    setLines((prev) => {
+                      const newLines = [...prev];
+                      newLines[selectedShapeIndex] = {
+                        ...newLines[selectedShapeIndex],
+                        color: e.target.value,
+                      };
+                      return newLines;
+                    });
+                  } else {
+                    setLineColor(e.target.value);
+                  }
+                }}
                 className="w-full px-3 py-2 rounded-lg text-sm font-mono border border-white/20 bg-white/5 text-white focus:outline-none focus:border-[#fbbf24] transition-colors"
                 placeholder="#fbbf24"
               />
@@ -1704,7 +1751,12 @@ export function InfiniteCanvas() {
           </div>
 
           {/* Fill Color Picker - Only for closed shapes */}
-          {["square", "triangle", "circle"].includes(selectedShape) && (
+          {(["square", "triangle", "circle"].includes(selectedShape) ||
+            (selectedShapeIndex !== null &&
+              selectedShapeIndex < lines.length &&
+              ["square", "triangle", "circle"].includes(
+                lines[selectedShapeIndex].shape || "",
+              ))) && (
             <div className="flex flex-col gap-2">
               <label
                 className="text-sm font-medium"
@@ -1716,37 +1768,127 @@ export function InfiniteCanvas() {
                 <div className="flex gap-2 items-center">
                   <input
                     type="color"
-                    value={fillColor === "transparent" ? "#ffffff" : fillColor}
-                    onChange={(e) => setFillColor(e.target.value)}
-                    disabled={fillColor === "transparent"}
+                    value={(() => {
+                      const currentFill =
+                        selectedShapeIndex !== null &&
+                        selectedShapeIndex < lines.length
+                          ? lines[selectedShapeIndex].fillColor || "transparent"
+                          : fillColor;
+                      return currentFill === "transparent"
+                        ? "#ffffff"
+                        : currentFill;
+                    })()}
+                    onChange={(e) => {
+                      if (
+                        selectedShapeIndex !== null &&
+                        selectedShapeIndex < lines.length
+                      ) {
+                        setLines((prev) => {
+                          const newLines = [...prev];
+                          newLines[selectedShapeIndex] = {
+                            ...newLines[selectedShapeIndex],
+                            fillColor: e.target.value,
+                          };
+                          return newLines;
+                        });
+                      } else {
+                        setFillColor(e.target.value);
+                      }
+                    }}
+                    disabled={(() => {
+                      const currentFill =
+                        selectedShapeIndex !== null &&
+                        selectedShapeIndex < lines.length
+                          ? lines[selectedShapeIndex].fillColor || "transparent"
+                          : fillColor;
+                      return currentFill === "transparent";
+                    })()}
                     className="flex-1 h-10 rounded-lg cursor-pointer border border-white/20 disabled:opacity-50 disabled:cursor-not-allowed"
                     style={{ background: "transparent" }}
                   />
                   <button
-                    onClick={() =>
-                      setFillColor(
-                        fillColor === "transparent" ? "#ffffff" : "transparent",
-                      )
-                    }
+                    onClick={() => {
+                      if (
+                        selectedShapeIndex !== null &&
+                        selectedShapeIndex < lines.length
+                      ) {
+                        const currentFill =
+                          lines[selectedShapeIndex].fillColor || "transparent";
+                        setLines((prev) => {
+                          const newLines = [...prev];
+                          newLines[selectedShapeIndex] = {
+                            ...newLines[selectedShapeIndex],
+                            fillColor:
+                              currentFill === "transparent"
+                                ? "#ffffff"
+                                : "transparent",
+                          };
+                          return newLines;
+                        });
+                      } else {
+                        setFillColor(
+                          fillColor === "transparent"
+                            ? "#ffffff"
+                            : "transparent",
+                        );
+                      }
+                    }}
                     className="px-3 py-2 rounded-lg text-xs font-medium border border-white/20 bg-white/5 text-white hover:bg-white/10 transition-colors"
-                    title={
-                      fillColor === "transparent"
+                    title={(() => {
+                      const currentFill =
+                        selectedShapeIndex !== null &&
+                        selectedShapeIndex < lines.length
+                          ? lines[selectedShapeIndex].fillColor || "transparent"
+                          : fillColor;
+                      return currentFill === "transparent"
                         ? "Enable fill"
-                        : "Disable fill"
-                    }
+                        : "Disable fill";
+                    })()}
                   >
-                    {fillColor === "transparent" ? "None" : "Clear"}
+                    {(() => {
+                      const currentFill =
+                        selectedShapeIndex !== null &&
+                        selectedShapeIndex < lines.length
+                          ? lines[selectedShapeIndex].fillColor || "transparent"
+                          : fillColor;
+                      return currentFill === "transparent" ? "None" : "Clear";
+                    })()}
                   </button>
                 </div>
-                {fillColor !== "transparent" && (
-                  <input
-                    type="text"
-                    value={fillColor}
-                    onChange={(e) => setFillColor(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg text-sm font-mono border border-white/20 bg-white/5 text-white focus:outline-none focus:border-[#fbbf24] transition-colors"
-                    placeholder="#ffffff"
-                  />
-                )}
+                {(() => {
+                  const currentFill =
+                    selectedShapeIndex !== null &&
+                    selectedShapeIndex < lines.length
+                      ? lines[selectedShapeIndex].fillColor || "transparent"
+                      : fillColor;
+                  return (
+                    currentFill !== "transparent" && (
+                      <input
+                        type="text"
+                        value={currentFill}
+                        onChange={(e) => {
+                          if (
+                            selectedShapeIndex !== null &&
+                            selectedShapeIndex < lines.length
+                          ) {
+                            setLines((prev) => {
+                              const newLines = [...prev];
+                              newLines[selectedShapeIndex] = {
+                                ...newLines[selectedShapeIndex],
+                                fillColor: e.target.value,
+                              };
+                              return newLines;
+                            });
+                          } else {
+                            setFillColor(e.target.value);
+                          }
+                        }}
+                        className="w-full px-3 py-2 rounded-lg text-sm font-mono border border-white/20 bg-white/5 text-white focus:outline-none focus:border-[#fbbf24] transition-colors"
+                        placeholder="#ffffff"
+                      />
+                    )
+                  );
+                })()}
               </div>
             </div>
           )}
@@ -1761,7 +1903,11 @@ export function InfiniteCanvas() {
                 Stroke Width
               </label>
               <span className="text-xs font-medium text-white/60">
-                {lineWidth}px
+                {selectedShapeIndex !== null &&
+                selectedShapeIndex < lines.length
+                  ? lines[selectedShapeIndex].width
+                  : lineWidth}
+                px
               </span>
             </div>
             <input
@@ -1769,11 +1915,31 @@ export function InfiniteCanvas() {
               min="1"
               max="20"
               step="1"
-              value={lineWidth}
-              onChange={(e) => setLineWidth(Number(e.target.value))}
+              value={
+                selectedShapeIndex !== null && selectedShapeIndex < lines.length
+                  ? lines[selectedShapeIndex].width
+                  : lineWidth
+              }
+              onChange={(e) => {
+                if (
+                  selectedShapeIndex !== null &&
+                  selectedShapeIndex < lines.length
+                ) {
+                  setLines((prev) => {
+                    const newLines = [...prev];
+                    newLines[selectedShapeIndex] = {
+                      ...newLines[selectedShapeIndex],
+                      width: Number(e.target.value),
+                    };
+                    return newLines;
+                  });
+                } else {
+                  setLineWidth(Number(e.target.value));
+                }
+              }}
               className="w-full h-2 rounded-lg appearance-none cursor-pointer"
               style={{
-                background: `linear-gradient(to right, #fbbf24 0%, #fbbf24 ${((lineWidth - 1) / 19) * 100}%, rgba(255, 255, 255, 0.1) ${((lineWidth - 1) / 19) * 100}%, rgba(255, 255, 255, 0.1) 100%)`,
+                background: `linear-gradient(to right, #fbbf24 0%, #fbbf24 ${(((selectedShapeIndex !== null && selectedShapeIndex < lines.length ? lines[selectedShapeIndex].width : lineWidth) - 1) / 19) * 100}%, rgba(255, 255, 255, 0.1) ${(((selectedShapeIndex !== null && selectedShapeIndex < lines.length ? lines[selectedShapeIndex].width : lineWidth) - 1) / 19) * 100}%, rgba(255, 255, 255, 0.1) 100%)`,
               }}
             />
             {/* Width Preview */}
@@ -1781,8 +1947,12 @@ export function InfiniteCanvas() {
               <div
                 style={{
                   width: "100%",
-                  height: `${lineWidth}px`,
-                  background: lineColor,
+                  height: `${selectedShapeIndex !== null && selectedShapeIndex < lines.length ? lines[selectedShapeIndex].width : lineWidth}px`,
+                  background:
+                    selectedShapeIndex !== null &&
+                    selectedShapeIndex < lines.length
+                      ? lines[selectedShapeIndex].color
+                      : lineColor,
                   borderRadius: "2px",
                   maxHeight: "20px",
                 }}
@@ -1791,7 +1961,10 @@ export function InfiniteCanvas() {
           </div>
 
           {/* Stroke Pattern - Only show for shape tools, not pen */}
-          {selectedShape !== "pen" && (
+          {(selectedShape !== "pen" ||
+            (selectedShapeIndex !== null &&
+              selectedShapeIndex < lines.length &&
+              lines[selectedShapeIndex].shape !== "pen")) && (
             <div className="flex flex-col gap-2">
               <label
                 className="text-sm font-medium"
@@ -1801,9 +1974,28 @@ export function InfiniteCanvas() {
               </label>
               <div className="flex gap-2">
                 <button
-                  onClick={() => setStrokePattern("solid")}
+                  onClick={() => {
+                    if (
+                      selectedShapeIndex !== null &&
+                      selectedShapeIndex < lines.length
+                    ) {
+                      setLines((prev) => {
+                        const newLines = [...prev];
+                        newLines[selectedShapeIndex] = {
+                          ...newLines[selectedShapeIndex],
+                          strokePattern: "solid",
+                        };
+                        return newLines;
+                      });
+                    } else {
+                      setStrokePattern("solid");
+                    }
+                  }}
                   className={`flex-1 px-3 py-2 rounded-lg border transition-all ${
-                    strokePattern === "solid"
+                    (selectedShapeIndex !== null &&
+                    selectedShapeIndex < lines.length
+                      ? lines[selectedShapeIndex].strokePattern || "solid"
+                      : strokePattern) === "solid"
                       ? "border-[#fbbf24] bg-[#fbbf24]/20"
                       : "border-white/20 bg-white/5 hover:border-white/40"
                   }`}
@@ -1821,15 +2013,41 @@ export function InfiniteCanvas() {
                       y1="8"
                       x2="60"
                       y2="8"
-                      stroke={strokePattern === "solid" ? "#fbbf24" : "#ffffff"}
+                      stroke={
+                        (selectedShapeIndex !== null &&
+                        selectedShapeIndex < lines.length
+                          ? lines[selectedShapeIndex].strokePattern || "solid"
+                          : strokePattern) === "solid"
+                          ? "#fbbf24"
+                          : "#ffffff"
+                      }
                       strokeWidth="3"
                     />
                   </svg>
                 </button>
                 <button
-                  onClick={() => setStrokePattern("dashed")}
+                  onClick={() => {
+                    if (
+                      selectedShapeIndex !== null &&
+                      selectedShapeIndex < lines.length
+                    ) {
+                      setLines((prev) => {
+                        const newLines = [...prev];
+                        newLines[selectedShapeIndex] = {
+                          ...newLines[selectedShapeIndex],
+                          strokePattern: "dashed",
+                        };
+                        return newLines;
+                      });
+                    } else {
+                      setStrokePattern("dashed");
+                    }
+                  }}
                   className={`flex-1 px-3 py-2 rounded-lg border transition-all ${
-                    strokePattern === "dashed"
+                    (selectedShapeIndex !== null &&
+                    selectedShapeIndex < lines.length
+                      ? lines[selectedShapeIndex].strokePattern || "solid"
+                      : strokePattern) === "dashed"
                       ? "border-[#fbbf24] bg-[#fbbf24]/20"
                       : "border-white/20 bg-white/5 hover:border-white/40"
                   }`}
@@ -1848,7 +2066,12 @@ export function InfiniteCanvas() {
                       x2="60"
                       y2="8"
                       stroke={
-                        strokePattern === "dashed" ? "#fbbf24" : "#ffffff"
+                        (selectedShapeIndex !== null &&
+                        selectedShapeIndex < lines.length
+                          ? lines[selectedShapeIndex].strokePattern || "solid"
+                          : strokePattern) === "dashed"
+                          ? "#fbbf24"
+                          : "#ffffff"
                       }
                       strokeWidth="3"
                       strokeDasharray="8 8"
@@ -1856,9 +2079,28 @@ export function InfiniteCanvas() {
                   </svg>
                 </button>
                 <button
-                  onClick={() => setStrokePattern("longDashed")}
+                  onClick={() => {
+                    if (
+                      selectedShapeIndex !== null &&
+                      selectedShapeIndex < lines.length
+                    ) {
+                      setLines((prev) => {
+                        const newLines = [...prev];
+                        newLines[selectedShapeIndex] = {
+                          ...newLines[selectedShapeIndex],
+                          strokePattern: "longDashed",
+                        };
+                        return newLines;
+                      });
+                    } else {
+                      setStrokePattern("longDashed");
+                    }
+                  }}
                   className={`flex-1 px-3 py-2 rounded-lg border transition-all ${
-                    strokePattern === "longDashed"
+                    (selectedShapeIndex !== null &&
+                    selectedShapeIndex < lines.length
+                      ? lines[selectedShapeIndex].strokePattern || "solid"
+                      : strokePattern) === "longDashed"
                       ? "border-[#fbbf24] bg-[#fbbf24]/20"
                       : "border-white/20 bg-white/5 hover:border-white/40"
                   }`}
@@ -1877,7 +2119,12 @@ export function InfiniteCanvas() {
                       x2="60"
                       y2="8"
                       stroke={
-                        strokePattern === "longDashed" ? "#fbbf24" : "#ffffff"
+                        (selectedShapeIndex !== null &&
+                        selectedShapeIndex < lines.length
+                          ? lines[selectedShapeIndex].strokePattern || "solid"
+                          : strokePattern) === "longDashed"
+                          ? "#fbbf24"
+                          : "#ffffff"
                       }
                       strokeWidth="3"
                       strokeDasharray="16 8"
@@ -1888,7 +2135,7 @@ export function InfiniteCanvas() {
             </div>
           )}
         </div>
-      )}
+      ) : null}
 
       {/* Center Toolbar - Shape Tools */}
       <div
