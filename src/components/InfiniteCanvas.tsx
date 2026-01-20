@@ -20,6 +20,15 @@ type ShapeType =
 
 type StrokePattern = "solid" | "dashed" | "longDashed";
 
+type CanvasColor =
+  | "black"
+  | "darkBlue"
+  | "white"
+  | "offWhite"
+  | "paper"
+  | "lightBlue";
+type CanvasTexture = "plain" | "dotted" | "grid" | "smallGrid" | "cross";
+
 interface DrawingLine {
   points: Point[];
   color: string;
@@ -63,6 +72,9 @@ export function InfiniteCanvas() {
   const [strokePattern, setStrokePattern] = useState<StrokePattern>("solid"); // Default stroke pattern
   const [fillColor, setFillColor] = useState("transparent"); // Default fill color (none)
   const [cursorStyle, setCursorStyle] = useState("crosshair");
+  const [canvasColor, setCanvasColor] = useState<CanvasColor>("black"); // Default canvas color
+  const [canvasTexture, setCanvasTexture] = useState<CanvasTexture>("plain"); // Default canvas texture
+  const [isCanvasSetupOpen, setIsCanvasSetupOpen] = useState(false); // Canvas setup panel visibility
   const userId = "default-user"; // Can be replaced with actual user ID from auth
 
   // Load canvas data from database on mount with localStorage fallback
@@ -630,6 +642,125 @@ export function InfiniteCanvas() {
     [scale],
   );
 
+  // Get canvas color value
+  const getCanvasColorValue = (color: CanvasColor): string => {
+    switch (color) {
+      case "black":
+        return "#010812";
+      case "darkBlue":
+        return "#0a1929";
+      case "white":
+        return "#ffffff";
+      case "offWhite":
+        return "#f5f5f5";
+      case "paper":
+        return "#fef9e7";
+      case "lightBlue":
+        return "#e3f2fd";
+      default:
+        return "#010812";
+    }
+  };
+
+  // Draw canvas background with texture
+  const drawCanvasBackground = useCallback(
+    (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => {
+      const bgColor = getCanvasColorValue(canvasColor);
+
+      // Fill background color
+      ctx.fillStyle = bgColor;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Apply texture pattern
+      if (canvasTexture !== "plain") {
+        // Determine pattern color based on background
+        const isDark = ["black", "darkBlue"].includes(canvasColor);
+        const patternColor = isDark
+          ? "rgba(255, 255, 255, 0.1)"
+          : "rgba(0, 0, 0, 0.1)";
+
+        ctx.save();
+        ctx.translate(offset.x, offset.y);
+        ctx.scale(scale, scale);
+
+        const gridSize = 30;
+        const smallGridSize = 10;
+        const dotSize = 2 / scale;
+
+        // Calculate visible area
+        const startX = Math.floor(-offset.x / scale / gridSize) * gridSize;
+        const startY = Math.floor(-offset.y / scale / gridSize) * gridSize;
+        const endX =
+          Math.ceil((canvas.width - offset.x) / scale / gridSize) * gridSize;
+        const endY =
+          Math.ceil((canvas.height - offset.y) / scale / gridSize) * gridSize;
+
+        ctx.strokeStyle = patternColor;
+        ctx.fillStyle = patternColor;
+        ctx.lineWidth = 1 / scale;
+
+        switch (canvasTexture) {
+          case "dotted":
+            // Draw dots at grid intersections
+            for (let x = startX; x <= endX; x += gridSize) {
+              for (let y = startY; y <= endY; y += gridSize) {
+                ctx.beginPath();
+                ctx.arc(x, y, dotSize, 0, Math.PI * 2);
+                ctx.fill();
+              }
+            }
+            break;
+
+          case "grid":
+            // Draw grid lines
+            ctx.beginPath();
+            for (let x = startX; x <= endX; x += gridSize) {
+              ctx.moveTo(x, startY);
+              ctx.lineTo(x, endY);
+            }
+            for (let y = startY; y <= endY; y += gridSize) {
+              ctx.moveTo(startX, y);
+              ctx.lineTo(endX, y);
+            }
+            ctx.stroke();
+            break;
+
+          case "smallGrid":
+            // Draw smaller grid lines
+            ctx.beginPath();
+            for (let x = startX; x <= endX; x += smallGridSize) {
+              ctx.moveTo(x, startY);
+              ctx.lineTo(x, endY);
+            }
+            for (let y = startY; y <= endY; y += smallGridSize) {
+              ctx.moveTo(startX, y);
+              ctx.lineTo(endX, y);
+            }
+            ctx.stroke();
+            break;
+
+          case "cross":
+            // Draw crosses at grid intersections
+            const crossSize = 4 / scale;
+            for (let x = startX; x <= endX; x += gridSize) {
+              for (let y = startY; y <= endY; y += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(x - crossSize, y);
+                ctx.lineTo(x + crossSize, y);
+                ctx.moveTo(x, y - crossSize);
+                ctx.lineTo(x, y + crossSize);
+                ctx.stroke();
+              }
+            }
+            break;
+        }
+
+        ctx.restore();
+      }
+    },
+    [canvasColor, canvasTexture, scale, offset],
+  );
+
   // Redraw the canvas
   const redraw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -640,8 +771,8 @@ export function InfiniteCanvas() {
 
     console.log("Redrawing canvas with", lines.length, "lines");
 
-    // Clear canvas
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // Draw background with texture
+    drawCanvasBackground(ctx, canvas);
 
     // Save context state
     ctx.save();
@@ -998,6 +1129,7 @@ export function InfiniteCanvas() {
     applyStrokePattern,
     strokePattern,
     getResizeHandles,
+    drawCanvasBackground,
   ]);
 
   // Handle canvas resize
@@ -1605,7 +1737,7 @@ export function InfiniteCanvas() {
     <div
       className="relative w-full h-screen overflow-hidden"
       style={{
-        background: "#010812",
+        background: getCanvasColorValue(canvasColor),
         overscrollBehavior: "none",
         touchAction: "none",
       }}
@@ -1613,7 +1745,7 @@ export function InfiniteCanvas() {
       {isLoading && (
         <div
           className="absolute inset-0 flex items-center justify-center z-50"
-          style={{ background: "#010812" }}
+          style={{ background: getCanvasColorValue(canvasColor) }}
         >
           <div className="flex flex-col items-center gap-4">
             <div className="w-12 h-12 border-4 border-[#fbbf24] border-t-transparent rounded-full animate-spin" />
@@ -1732,6 +1864,36 @@ export function InfiniteCanvas() {
               <path d="M3 6h18" />
               <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
               <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+            </svg>
+          </button>
+
+          <button
+            onClick={() => setIsCanvasSetupOpen(!isCanvasSetupOpen)}
+            className={`p-2.5 rounded-full backdrop-blur-md border border-white/10 transition-all hover:scale-105 ${
+              isCanvasSetupOpen
+                ? "border-[#fbbf24]/50 bg-[#fbbf24]/10"
+                : "hover:border-[#fbbf24]/50"
+            }`}
+            style={{
+              background: isCanvasSetupOpen
+                ? "rgba(251, 191, 36, 0.1)"
+                : "rgba(255, 255, 255, 0.05)",
+            }}
+            title="Canvas Setup"
+          >
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="#fbbf24"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+              <circle cx="8.5" cy="8.5" r="1.5" />
+              <path d="M20.4 14.5L16 10 4 20" />
             </svg>
           </button>
         </div>
@@ -2397,6 +2559,226 @@ export function InfiniteCanvas() {
           </svg>
         </button>
       </div>
+
+      {/* Canvas Setup - Right Side */}
+      {isCanvasSetupOpen && (
+        <div
+          className="absolute right-6 top-1/2 transform -translate-y-1/2 flex flex-col gap-4 px-5 py-6 rounded-2xl backdrop-blur-md border border-white/10 shadow-2xl z-20"
+          style={{
+            background: "rgba(255, 255, 255, 0.05)",
+            pointerEvents: "auto",
+            minWidth: "220px",
+          }}
+        >
+          {/* Title */}
+          <div className="text-sm font-semibold text-[#fbbf24] border-b border-white/10 pb-2">
+            Canvas Setup
+          </div>
+
+          {/* Canvas Color */}
+          <div className="flex flex-col gap-2">
+            <label className="text-sm font-medium" style={{ color: "#fbbf24" }}>
+              Canvas Color
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                onClick={() => setCanvasColor("black")}
+                className={`h-10 rounded-lg border-2 transition-all ${
+                  canvasColor === "black"
+                    ? "border-[#fbbf24] shadow-lg shadow-[#fbbf24]/30"
+                    : "border-white/20 hover:border-white/40"
+                }`}
+                style={{ background: "#010812" }}
+                title="Black"
+              />
+              <button
+                onClick={() => setCanvasColor("darkBlue")}
+                className={`h-10 rounded-lg border-2 transition-all ${
+                  canvasColor === "darkBlue"
+                    ? "border-[#fbbf24] shadow-lg shadow-[#fbbf24]/30"
+                    : "border-white/20 hover:border-white/40"
+                }`}
+                style={{ background: "#0a1929" }}
+                title="Dark Blue"
+              />
+              <button
+                onClick={() => setCanvasColor("white")}
+                className={`h-10 rounded-lg border-2 transition-all ${
+                  canvasColor === "white"
+                    ? "border-[#fbbf24] shadow-lg shadow-[#fbbf24]/30"
+                    : "border-white/20 hover:border-white/40"
+                }`}
+                style={{ background: "#ffffff" }}
+                title="White"
+              />
+              <button
+                onClick={() => setCanvasColor("offWhite")}
+                className={`h-10 rounded-lg border-2 transition-all ${
+                  canvasColor === "offWhite"
+                    ? "border-[#fbbf24] shadow-lg shadow-[#fbbf24]/30"
+                    : "border-white/20 hover:border-white/40"
+                }`}
+                style={{ background: "#f5f5f5" }}
+                title="Off White"
+              />
+              <button
+                onClick={() => setCanvasColor("paper")}
+                className={`h-10 rounded-lg border-2 transition-all ${
+                  canvasColor === "paper"
+                    ? "border-[#fbbf24] shadow-lg shadow-[#fbbf24]/30"
+                    : "border-white/20 hover:border-white/40"
+                }`}
+                style={{ background: "#fef9e7" }}
+                title="Paper"
+              />
+              <button
+                onClick={() => setCanvasColor("lightBlue")}
+                className={`h-10 rounded-lg border-2 transition-all ${
+                  canvasColor === "lightBlue"
+                    ? "border-[#fbbf24] shadow-lg shadow-[#fbbf24]/30"
+                    : "border-white/20 hover:border-white/40"
+                }`}
+                style={{ background: "#e3f2fd" }}
+                title="Light Blue"
+              />
+            </div>
+          </div>
+
+          {/* Canvas Texture */}
+          <div className="flex flex-col gap-2">
+            <label className="text-sm font-medium" style={{ color: "#fbbf24" }}>
+              Canvas Texture
+            </label>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => setCanvasTexture("plain")}
+                className={`px-3 py-2 rounded-lg border transition-all text-left ${
+                  canvasTexture === "plain"
+                    ? "border-[#fbbf24] bg-[#fbbf24]/20"
+                    : ["white", "offWhite", "paper", "lightBlue"].includes(
+                          canvasColor,
+                        )
+                      ? "border-black/20 bg-black/5 hover:border-black/40"
+                      : "border-white/20 bg-white/5 hover:border-white/40"
+                }`}
+              >
+                <span
+                  className="text-sm"
+                  style={{
+                    color: ["white", "offWhite", "paper", "lightBlue"].includes(
+                      canvasColor,
+                    )
+                      ? "#000000"
+                      : "#ffffff",
+                  }}
+                >
+                  Plain
+                </span>
+              </button>
+              <button
+                onClick={() => setCanvasTexture("dotted")}
+                className={`px-3 py-2 rounded-lg border transition-all text-left ${
+                  canvasTexture === "dotted"
+                    ? "border-[#fbbf24] bg-[#fbbf24]/20"
+                    : ["white", "offWhite", "paper", "lightBlue"].includes(
+                          canvasColor,
+                        )
+                      ? "border-black/20 bg-black/5 hover:border-black/40"
+                      : "border-white/20 bg-white/5 hover:border-white/40"
+                }`}
+              >
+                <span
+                  className="text-sm"
+                  style={{
+                    color: ["white", "offWhite", "paper", "lightBlue"].includes(
+                      canvasColor,
+                    )
+                      ? "#000000"
+                      : "#ffffff",
+                  }}
+                >
+                  Dotted
+                </span>
+              </button>
+              <button
+                onClick={() => setCanvasTexture("grid")}
+                className={`px-3 py-2 rounded-lg border transition-all text-left ${
+                  canvasTexture === "grid"
+                    ? "border-[#fbbf24] bg-[#fbbf24]/20"
+                    : ["white", "offWhite", "paper", "lightBlue"].includes(
+                          canvasColor,
+                        )
+                      ? "border-black/20 bg-black/5 hover:border-black/40"
+                      : "border-white/20 bg-white/5 hover:border-white/40"
+                }`}
+              >
+                <span
+                  className="text-sm"
+                  style={{
+                    color: ["white", "offWhite", "paper", "lightBlue"].includes(
+                      canvasColor,
+                    )
+                      ? "#000000"
+                      : "#ffffff",
+                  }}
+                >
+                  Grid
+                </span>
+              </button>
+              <button
+                onClick={() => setCanvasTexture("smallGrid")}
+                className={`px-3 py-2 rounded-lg border transition-all text-left ${
+                  canvasTexture === "smallGrid"
+                    ? "border-[#fbbf24] bg-[#fbbf24]/20"
+                    : ["white", "offWhite", "paper", "lightBlue"].includes(
+                          canvasColor,
+                        )
+                      ? "border-black/20 bg-black/5 hover:border-black/40"
+                      : "border-white/20 bg-white/5 hover:border-white/40"
+                }`}
+              >
+                <span
+                  className="text-sm"
+                  style={{
+                    color: ["white", "offWhite", "paper", "lightBlue"].includes(
+                      canvasColor,
+                    )
+                      ? "#000000"
+                      : "#ffffff",
+                  }}
+                >
+                  Small Grid
+                </span>
+              </button>
+              <button
+                onClick={() => setCanvasTexture("cross")}
+                className={`px-3 py-2 rounded-lg border transition-all text-left ${
+                  canvasTexture === "cross"
+                    ? "border-[#fbbf24] bg-[#fbbf24]/20"
+                    : ["white", "offWhite", "paper", "lightBlue"].includes(
+                          canvasColor,
+                        )
+                      ? "border-black/20 bg-black/5 hover:border-black/40"
+                      : "border-white/20 bg-white/5 hover:border-white/40"
+                }`}
+              >
+                <span
+                  className="text-sm"
+                  style={{
+                    color: ["white", "offWhite", "paper", "lightBlue"].includes(
+                      canvasColor,
+                    )
+                      ? "#000000"
+                      : "#ffffff",
+                  }}
+                >
+                  Cross
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* AI Button - Bottom Right */}
       <div className="absolute bottom-6 right-6 flex items-center gap-3 z-20">
