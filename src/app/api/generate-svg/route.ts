@@ -1,8 +1,56 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
 
+// Rate limiting tracker (in-memory, resets on server restart)
+const requestTracker = new Map<string, { count: number; resetTime: number }>();
+const RATE_LIMIT_WINDOW = 60000; // 1 minute
+const MAX_REQUESTS_PER_WINDOW = 10; // 10 requests per minute
+
+function checkRateLimit(identifier: string): {
+  allowed: boolean;
+  retryAfter?: number;
+} {
+  const now = Date.now();
+  const tracker = requestTracker.get(identifier);
+
+  if (!tracker || now > tracker.resetTime) {
+    requestTracker.set(identifier, {
+      count: 1,
+      resetTime: now + RATE_LIMIT_WINDOW,
+    });
+    return { allowed: true };
+  }
+
+  if (tracker.count >= MAX_REQUESTS_PER_WINDOW) {
+    const retryAfter = Math.ceil((tracker.resetTime - now) / 1000);
+    return { allowed: false, retryAfter };
+  }
+
+  tracker.count++;
+  return { allowed: true };
+}
+
 export async function POST(request: Request) {
+  const startTime = Date.now();
+
   try {
+    // Get client IP for rate limiting
+    const forwardedFor = request.headers.get("x-forwarded-for");
+    const clientIp = forwardedFor ? forwardedFor.split(",")[0] : "unknown";
+
+    // Check server-side rate limiting
+    const rateLimitCheck = checkRateLimit(clientIp);
+    if (!rateLimitCheck.allowed) {
+      console.warn(`Rate limit exceeded for IP: ${clientIp}`);
+      return NextResponse.json(
+        {
+          error: `Server rate limit exceeded. Please wait ${rateLimitCheck.retryAfter} seconds.`,
+          retryAfter: rateLimitCheck.retryAfter,
+        },
+        { status: 429 },
+      );
+    }
+
     const { prompt } = await request.json();
 
     if (!prompt) {
@@ -12,10 +60,18 @@ export async function POST(request: Request) {
       );
     }
 
+    if (prompt.length > 200) {
+      return NextResponse.json(
+        { error: "Prompt too long. Please keep it under 200 characters." },
+        { status: 400 },
+      );
+    }
+
     // Using OpenAI GPT-4o-mini (affordable and fast)
     const apiKey = process.env.OPENAI_API_KEY;
 
     if (!apiKey) {
+      console.error("OPENAI_API_KEY not configured");
       return NextResponse.json(
         {
           error:
@@ -64,6 +120,7 @@ Use only square, rectangle, and circle shapes. Position them to clearly represen
 Return ONLY the JSON object with the shapes array.`;
 
       console.log("Sending request to OpenAI...");
+      console.log(`Client IP: ${clientIp}, Prompt length: ${prompt.length}`);
 
       const completion = await openai.chat.completions.create({
         model: "gpt-4o-mini",
@@ -81,6 +138,9 @@ Return ONLY the JSON object with the shapes array.`;
         max_tokens: 2000,
         response_format: { type: "json_object" }, // Force JSON response
       });
+
+      const apiTime = Date.now() - startTime;
+      console.log(`OpenAI API response time: ${apiTime}ms`);
 
       const responseText = completion.choices[0]?.message?.content;
 
@@ -150,6 +210,9 @@ Return ONLY the JSON object with the shapes array.`;
 
       console.log(`Successfully generated ${validShapes.length} valid shapes`);
 
+      const totalTime = Date.now() - startTime;
+      console.log(`Total request time: ${totalTime}ms`);
+
       return NextResponse.json({
         diagram: { shapes: validShapes },
         debug: {
@@ -157,12 +220,21 @@ Return ONLY the JSON object with the shapes array.`;
           validShapes: validShapes.length,
           filteredOut: diagramData.shapes.length - validShapes.length,
         },
+        performance: {
+          totalTime,
+          apiTime: apiTime,
+        },
       });
     } catch (error: any) {
       console.error("OpenAI API Error:", error);
+      console.error("Error details:", {
+        status: error.status,
+        message: error.message,
+        type: error.type,
+      });
 
       // Handle specific OpenAI errors
-      if (error.status === 401) {
+      if (error.status === 401 || error.code === "invalid_api_key") {
         return NextResponse.json(
           {
             error:
@@ -172,18 +244,19 @@ Return ONLY the JSON object with the shapes array.`;
         );
       }
 
-      if (error.status === 429) {
+      if (error.status === 429 || error.code === "rate_limit_exceeded") {
         const retryAfter = error.headers?.["retry-after"] || "60";
+        console.warn(`OpenAI rate limit hit. Retry after: ${retryAfter}s`);
         return NextResponse.json(
           {
-            error: `Rate limit exceeded. Please wait ${retryAfter} seconds before trying again.`,
+            error: `OpenAI rate limit exceeded. Please wait ${retryAfter} seconds before trying again.`,
             retryAfter: retryAfter,
           },
           { status: 429 },
         );
       }
 
-      if (error.status === 402) {
+      if (error.status === 402 || error.code === "insufficient_quota") {
         return NextResponse.json(
           {
             error:
@@ -193,14 +266,41 @@ Return ONLY the JSON object with the shapes array.`;
         );
       }
 
+      if (error.status === 503 || error.code === "service_unavailable") {
+        return NextResponse.json(
+          {
+            error:
+              "OpenAI service is temporarily unavailable. Please try again in a moment.",
+          },
+          { status: 503 },
+        );
+      }
+
+      // Generic API errors
+      if (error.status >= 500) {
+        return NextResponse.json(
+          {
+            error: "OpenAI service error. Please try again later.",
+          },
+          { status: error.status },
+        );
+      }
+
       throw error;
     }
   } catch (error: any) {
     console.error("Error generating diagram:", error);
+
+    // Log full error for debugging
+    if (error.stack) {
+      console.error("Stack trace:", error.stack);
+    }
+
     return NextResponse.json(
       {
-        error: "Internal server error",
-        details: error.message || "Unknown error",
+        error: "Internal server error. Please try again.",
+        details:
+          process.env.NODE_ENV === "development" ? error.message : undefined,
       },
       { status: 500 },
     );

@@ -32,8 +32,12 @@ export function AIDrawer({
   const [retryCount, setRetryCount] = useState(0);
   const [lastRequestTime, setLastRequestTime] = useState(0);
   const [cooldownRemaining, setCooldownRemaining] = useState(0);
+  const [isRetrying, setIsRetrying] = useState(false);
+  const [retryAfter, setRetryAfter] = useState(0);
 
-  const COOLDOWN_SECONDS = 5; // Minimum 5 seconds between requests
+  const COOLDOWN_SECONDS = 3; // Minimum 3 seconds between requests
+  const MAX_RETRY_ATTEMPTS = 3;
+  const RETRY_DELAYS = [5, 10, 30]; // Exponential backoff: 5s, 10s, 30s
 
   // Update cooldown timer
   useState(() => {
@@ -45,30 +49,39 @@ export function AIDrawer({
     }
   });
 
-  const handleGenerate = async () => {
+  const handleGenerate = async (isAutoRetry = false, attempt = 0) => {
     if (!prompt.trim()) {
       setError("Please enter a prompt");
       return;
     }
 
-    // Check cooldown
-    const now = Date.now();
-    const timeSinceLastRequest = (now - lastRequestTime) / 1000;
-    if (timeSinceLastRequest < COOLDOWN_SECONDS && lastRequestTime > 0) {
-      setError(
-        `Please wait ${Math.ceil(COOLDOWN_SECONDS - timeSinceLastRequest)} more seconds before making another request.`,
-      );
-      return;
+    // Check cooldown (skip for auto-retries)
+    if (!isAutoRetry) {
+      const now = Date.now();
+      const timeSinceLastRequest = (now - lastRequestTime) / 1000;
+      if (timeSinceLastRequest < COOLDOWN_SECONDS && lastRequestTime > 0) {
+        setError(
+          `Please wait ${Math.ceil(COOLDOWN_SECONDS - timeSinceLastRequest)} more seconds before making another request.`,
+        );
+        return;
+      }
+      setLastRequestTime(now);
+      setCooldownRemaining(COOLDOWN_SECONDS);
     }
 
     setIsGenerating(true);
     setError("");
     setSuccess("");
-    setLastRequestTime(now);
-    setCooldownRemaining(COOLDOWN_SECONDS);
 
     try {
-      console.log("Sending request to generate diagram for:", prompt);
+      console.log(
+        `[Attempt ${attempt + 1}/${MAX_RETRY_ATTEMPTS + 1}] Sending request to generate diagram for:`,
+        prompt,
+      );
+
+      // Add timeout to prevent hanging requests
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
 
       const response = await fetch("/api/generate-svg", {
         method: "POST",
@@ -76,20 +89,65 @@ export function AIDrawer({
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ prompt }),
+        signal: controller.signal,
       });
 
+      clearTimeout(timeoutId);
       const data = await response.json();
       console.log("API Response:", data);
 
       if (!response.ok) {
-        // Handle rate limiting with specific message
-        if (response.status === 429) {
-          const retryTime = data.retryAfter || "a moment";
-          const retryMessage =
-            data.error ||
-            `Rate limit exceeded. Please wait ${retryTime} before trying again.`;
-          throw new Error(retryMessage);
+        // Handle rate limiting with auto-retry
+        if (response.status === 429 && attempt < MAX_RETRY_ATTEMPTS) {
+          const retryDelay = RETRY_DELAYS[attempt] || 30;
+          setRetryAfter(retryDelay);
+          setIsRetrying(true);
+          setError(
+            `Rate limit exceeded. Retrying in ${retryDelay} seconds... (Attempt ${attempt + 1}/${MAX_RETRY_ATTEMPTS})`,
+          );
+
+          // Countdown timer
+          let countdown = retryDelay;
+          const countdownInterval = setInterval(() => {
+            countdown--;
+            setRetryAfter(countdown);
+            if (countdown > 0) {
+              setError(
+                `Rate limit exceeded. Retrying in ${countdown} seconds... (Attempt ${attempt + 1}/${MAX_RETRY_ATTEMPTS})`,
+              );
+            }
+          }, 1000);
+
+          // Auto-retry after delay
+          await new Promise((resolve) =>
+            setTimeout(resolve, retryDelay * 1000),
+          );
+          clearInterval(countdownInterval);
+          setIsRetrying(false);
+          return handleGenerate(true, attempt + 1);
+        } else if (response.status === 429) {
+          throw new Error(
+            "Rate limit exceeded. Maximum retry attempts reached. Please try again later.",
+          );
         }
+
+        // Handle other errors
+        if (response.status === 401) {
+          throw new Error(
+            "Invalid API key. Please check your OpenAI API key configuration.",
+          );
+        }
+        if (response.status === 402) {
+          throw new Error(
+            "Insufficient OpenAI credits. Please add credits to your account.",
+          );
+        }
+        if (response.status >= 500) {
+          throw new Error(
+            "OpenAI service error. Please try again in a moment.",
+          );
+        }
+
         throw new Error(data.error || "Failed to generate diagram");
       }
 
@@ -135,12 +193,25 @@ export function AIDrawer({
         onClose();
       }, 1500);
     } catch (err) {
-      const errorMessage =
-        err instanceof Error ? err.message : "An error occurred";
-      console.error("Generation error:", errorMessage);
-      setError(errorMessage);
+      // Handle timeout errors
+      if (err instanceof Error && err.name === "AbortError") {
+        const errorMsg = "Request timed out. Please try again.";
+        console.error(errorMsg);
+        setError(errorMsg);
+        setIsRetrying(false);
+        return;
+      }
 
-      // Only increment retry count for rate limit errors
+      const errorMessage =
+        err instanceof Error ? err.message : "An unexpected error occurred";
+      console.error("Generation error:", errorMessage, err);
+
+      // Don't show error if we're retrying
+      if (!isRetrying) {
+        setError(errorMessage);
+      }
+
+      // Track retry count for analytics
       if (
         errorMessage.includes("Rate limit") ||
         errorMessage.includes("quota")
@@ -148,8 +219,19 @@ export function AIDrawer({
         setRetryCount((prev) => prev + 1);
       }
     } finally {
-      setIsGenerating(false);
+      if (!isRetrying) {
+        setIsGenerating(false);
+      }
     }
+  };
+
+  // Cancel retry on unmount or drawer close
+  const handleClose = () => {
+    setIsRetrying(false);
+    setRetryAfter(0);
+    setError("");
+    setSuccess("");
+    onClose();
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -166,7 +248,7 @@ export function AIDrawer({
         <div
           className="fixed inset-0 backdrop-blur-sm z-40 transition-opacity"
           style={{ background: "rgba(1, 8, 18, 0.8)" }}
-          onClick={onClose}
+          onClick={handleClose}
         />
       )}
 
@@ -219,7 +301,7 @@ export function AIDrawer({
               </div>
             </div>
             <button
-              onClick={onClose}
+              onClick={handleClose}
               className="p-2 rounded-lg transition-all hover:scale-110"
               style={{ background: "rgba(255, 255, 255, 0.05)" }}
             >
@@ -266,40 +348,89 @@ export function AIDrawer({
                 <div
                   className="p-4 rounded-lg border"
                   style={{
-                    background: "rgba(177, 9, 16, 0.1)",
-                    borderColor: "rgba(177, 9, 16, 0.3)",
+                    background: isRetrying
+                      ? "rgba(251, 191, 36, 0.1)"
+                      : "rgba(177, 9, 16, 0.1)",
+                    borderColor: isRetrying
+                      ? "rgba(251, 191, 36, 0.3)"
+                      : "rgba(177, 9, 16, 0.3)",
                   }}
                 >
                   <div className="flex items-start gap-3">
-                    <svg
-                      className="w-5 h-5 shrink-0 mt-0.5"
-                      fill="#b10910"
-                      viewBox="0 0 20 20"
-                    >
-                      <path
-                        fillRule="evenodd"
-                        d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                        clipRule="evenodd"
+                    {isRetrying ? (
+                      <Loader2
+                        className="w-5 h-5 shrink-0 mt-0.5 animate-spin"
+                        style={{ color: "#fbbf24" }}
                       />
-                    </svg>
+                    ) : (
+                      <svg
+                        className="w-5 h-5 shrink-0 mt-0.5"
+                        fill="#b10910"
+                        viewBox="0 0 20 20"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                    )}
                     <div className="flex-1">
                       <p
                         className="text-sm font-medium"
-                        style={{ color: "#ff6b6b" }}
+                        style={{ color: isRetrying ? "#fbbf24" : "#ff6b6b" }}
                       >
                         {error}
                       </p>
-                      {error.includes("Rate limit") && (
+                      {isRetrying && retryAfter > 0 && (
+                        <div className="mt-3">
+                          <div className="w-full bg-white/10 rounded-full h-2 overflow-hidden">
+                            <div
+                              className="h-full bg-gradient-to-r from-[#fbbf24] to-[#f59e0b] transition-all duration-1000"
+                              style={{
+                                width: `${(1 - retryAfter / RETRY_DELAYS[Math.min(retryCount, RETRY_DELAYS.length - 1)]) * 100}%`,
+                              }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                      {!isRetrying &&
+                        error.includes("Rate limit") &&
+                        !error.includes("Maximum retry") && (
+                          <div
+                            className="mt-2 text-xs"
+                            style={{ color: "rgba(255, 107, 107, 0.8)" }}
+                          >
+                            <p className="font-semibold mb-1">Tips:</p>
+                            <ul className="list-disc list-inside space-y-1 ml-2">
+                              <li>Wait a few moments before trying again</li>
+                              <li>The system will auto-retry with backoff</li>
+                              <li>Check your API usage limits</li>
+                            </ul>
+                          </div>
+                        )}
+                      {error.includes("Maximum retry") && (
                         <div
                           className="mt-2 text-xs"
                           style={{ color: "rgba(255, 107, 107, 0.8)" }}
                         >
-                          <p className="font-semibold mb-1">Common causes:</p>
+                          <p className="font-semibold mb-1">What to do:</p>
                           <ul className="list-disc list-inside space-y-1 ml-2">
-                            <li>Making requests too quickly</li>
-                            <li>Free tier rate limit reached</li>
-                            <li>Monthly quota exceeded</li>
+                            <li>Wait 5-10 minutes</li>
+                            <li>Check your OpenAI API usage limits</li>
+                            <li>Consider upgrading your API plan</li>
                           </ul>
+                        </div>
+                      )}
+                      {error.includes("Invalid API key") && (
+                        <div
+                          className="mt-2 text-xs"
+                          style={{ color: "rgba(255, 107, 107, 0.8)" }}
+                        >
+                          <p>
+                            Check your .env.local file and ensure OPENAI_API_KEY
+                            is set correctly.
+                          </p>
                         </div>
                       )}
                     </div>
@@ -394,7 +525,7 @@ export function AIDrawer({
               </div>
             )}
             <button
-              onClick={handleGenerate}
+              onClick={() => handleGenerate()}
               disabled={isGenerating || !prompt.trim() || cooldownRemaining > 0}
               className="w-full flex items-center justify-center gap-3 px-6 py-3.5 rounded-lg font-semibold transition-all hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100 shadow-lg"
               style={{
@@ -406,7 +537,12 @@ export function AIDrawer({
                   isGenerating || cooldownRemaining > 0 ? "#fbbf24" : "#010812",
               }}
             >
-              {isGenerating ? (
+              {isRetrying ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Retrying in {retryAfter}s...
+                </>
+              ) : isGenerating ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
                   Generating...
