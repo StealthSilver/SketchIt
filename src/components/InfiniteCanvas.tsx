@@ -977,70 +977,99 @@ export function InfiniteCanvas() {
   }, [selectedShape, selectedShapes, clipboard, lines, scale]);
 
   // Handle AI-generated SVG
-  const handleSVGGenerated = (svgString: string) => {
+  interface DiagramShape {
+    id: string;
+    type: "square" | "rectangle" | "circle";
+    width?: number;
+    height?: number;
+    size?: number;
+    radius?: number;
+    bottomLeft?: { x: number; y: number };
+    center?: { x: number; y: number };
+  }
+
+  const handleDiagramGenerated = (shapes: DiagramShape[]) => {
     try {
-      // Create an image from the SVG
-      const blob = new Blob([svgString], { type: "image/svg+xml" });
-      const url = URL.createObjectURL(blob);
-      const img = new Image();
+      const canvas = canvasRef.current;
+      if (!canvas) return;
 
-      img.onload = () => {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
+      // Calculate center offset for the diagram
+      const centerX = (canvas.width / 2 - offset.x) / scale;
+      const centerY = (canvas.height / 2 - offset.y) / scale;
 
-        const ctx = canvas.getContext("2d");
-        if (!ctx) return;
+      // Offset to center the diagram (assuming typical coordinate system is 0-400)
+      const diagramOffsetX = centerX - 200;
+      const diagramOffsetY = centerY - 200;
 
-        // Calculate position (center of viewport)
-        const centerX = canvas.width / 2 - offset.x;
-        const centerY = canvas.height / 2 - offset.y;
+      const newLines: DrawingLine[] = [];
 
-        // Scale the SVG to a reasonable size (max 400px)
-        const maxSize = 400;
-        const scaleFactor = Math.min(
-          maxSize / img.width,
-          maxSize / img.height,
-          1,
-        );
-        const width = img.width * scaleFactor;
-        const height = img.height * scaleFactor;
+      shapes.forEach((shape) => {
+        let points: Point[] = [];
+        let shapeType: ShapeType = "square";
 
-        // Convert SVG to canvas points by creating an outline
-        // For simplicity, we'll add it as a series of connected points forming a rectangle
-        // with the image data stored (you could enhance this to trace the actual SVG paths)
-        const svgPoints: Point[] = [
-          { x: centerX / scale, y: centerY / scale },
-          { x: (centerX + width) / scale, y: centerY / scale },
-          { x: (centerX + width) / scale, y: (centerY + height) / scale },
-          { x: centerX / scale, y: (centerY + height) / scale },
-          { x: centerX / scale, y: centerY / scale },
-        ];
+        if (
+          shape.type === "rectangle" &&
+          shape.width &&
+          shape.height &&
+          shape.bottomLeft
+        ) {
+          // Rectangle: draw from bottomLeft
+          const x = shape.bottomLeft.x + diagramOffsetX;
+          const y =
+            canvas.height / scale - (shape.bottomLeft.y + diagramOffsetY); // Flip Y
+          const endX = x + shape.width;
+          const endY = y - shape.height; // Negative because Y is flipped
 
-        // Store SVG data in a new line object
-        const newLine: DrawingLine & {
-          svgData?: string;
-          svgSize?: { width: number; height: number };
-        } = {
-          points: svgPoints,
-          color: "#000000",
-          width: 2,
-          shape: "square",
-          svgData: svgString,
-          svgSize: { width, height },
-        };
+          points = [
+            { x, y },
+            { x: endX, y: endY },
+          ];
+          shapeType = "square"; // Use square shape for rectangles
+        } else if (shape.type === "square" && shape.size && shape.bottomLeft) {
+          // Square: draw from bottomLeft
+          const x = shape.bottomLeft.x + diagramOffsetX;
+          const y =
+            canvas.height / scale - (shape.bottomLeft.y + diagramOffsetY); // Flip Y
+          const endX = x + shape.size;
+          const endY = y - shape.size; // Negative because Y is flipped
 
-        setLines((prev) => [...prev, newLine]);
-        URL.revokeObjectURL(url);
-      };
+          points = [
+            { x, y },
+            { x: endX, y: endY },
+          ];
+          shapeType = "square";
+        } else if (shape.type === "circle" && shape.radius && shape.center) {
+          // Circle: draw from center, with radius as distance to edge
+          const centerPosX = shape.center.x + diagramOffsetX;
+          const centerPosY =
+            canvas.height / scale - (shape.center.y + diagramOffsetY); // Flip Y
 
-      img.onerror = () => {
-        console.error("Failed to load SVG image");
-        URL.revokeObjectURL(url);
-      };
+          points = [
+            { x: centerPosX, y: centerPosY },
+            { x: centerPosX + shape.radius, y: centerPosY },
+          ];
+          shapeType = "circle";
+        }
 
-      img.src = url;
+        if (points.length >= 2) {
+          const newLine: DrawingLine = {
+            points,
+            color: lineColor,
+            width: lineWidth,
+            shape: shapeType,
+            strokePattern: "solid",
+            fillColor: "transparent",
+          };
+          newLines.push(newLine);
+        }
+      });
+
+      // Add all shapes to the canvas
+      setLines((prev) => [...prev, ...newLines]);
+
+      console.log(`Generated ${newLines.length} shapes from diagram`);
     } catch (error) {
-      console.error("Error handling SVG:", error);
+      console.error("Error handling diagram:", error);
     }
   };
 
@@ -1639,7 +1668,7 @@ export function InfiniteCanvas() {
       <AIDrawer
         isOpen={isAIDrawerOpen}
         onClose={() => setIsAIDrawerOpen(false)}
-        onSVGGenerated={handleSVGGenerated}
+        onDiagramGenerated={handleDiagramGenerated}
       />
     </div>
   );

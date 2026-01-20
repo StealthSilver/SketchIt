@@ -19,7 +19,7 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           error:
-            "API key not configured. Please add GOOGLE_API_KEY to your .env.local file. Get free key at: https://aistudio.google.com/app/apikey",
+            "API key not configured. Please add GOOGLE_API_KEY to your .env file. Get free key at: https://aistudio.google.com/app/apikey",
         },
         { status: 500 },
       );
@@ -31,43 +31,86 @@ export async function POST(request: Request) {
         model: "gemini-1.5-flash",
       });
 
-      const systemPrompt = `You are an expert SVG diagram generator. Generate clean, valid SVG code based on user descriptions.
+      const fullPrompt = `You are an expert diagram structure generator. Your job is to create a structured JSON diagram mapping using only basic shapes: square, rectangle, and circle.
 
 CRITICAL RULES:
-1. Return ONLY the raw SVG code - no markdown, no code blocks, no explanations
-2. Start directly with <svg and end with </svg>
-3. Use viewBox for scalability (e.g., viewBox="0 0 800 600")
-4. Include proper width and height attributes (width="800" height="600")
-5. Use clean, semantic SVG elements
-6. Add colors and styling inline
-7. Make diagrams clear and professional
-8. Ensure all text is readable (font-size at least 14)
-9. Use appropriate shapes for the diagram type requested`;
+1. Return ONLY valid JSON - no markdown, no code blocks, no explanations, no text before or after the JSON
+2. Use ONLY these shape types: "square", "rectangle", "circle"
+3. For squares: use "size" and "bottomLeft" coordinates
+4. For rectangles: use "width", "height", and "bottomLeft" coordinates
+5. For circles: use "radius" and "center" coordinates
+6. Position shapes appropriately to form the requested diagram
+7. Use a coordinate system where (0,0) is bottom-left, typical canvas size is 400x400
+8. Make shapes proportional and well-positioned to clearly represent the diagram
 
-      const result = await model.generateContent([
-        systemPrompt,
-        `\n\nGenerate an SVG diagram for: ${prompt}`,
-      ]);
+Example format:
+{
+  "shapes": [
+    {
+      "id": "base",
+      "type": "rectangle",
+      "width": 200,
+      "height": 150,
+      "bottomLeft": { "x": 100, "y": 100 }
+    },
+    {
+      "id": "element",
+      "type": "square",
+      "size": 40,
+      "bottomLeft": { "x": 180, "y": 180 }
+    },
+    {
+      "id": "detail",
+      "type": "circle",
+      "radius": 5,
+      "center": { "x": 200, "y": 200 }
+    }
+  ]
+}
+
+Task: I want you to give me a diagram mapping for creating a ${prompt} diagram. You can only use square, rectangle and circle. I need the format like square - size - coordinates. So that after all the shapes are drawn they resemble the final diagram of a ${prompt}.
+
+Remember: Return ONLY the JSON object, nothing else.`;
+
+      const result = await model.generateContent(fullPrompt);
 
       const response = result.response;
-      let svgContent = response.text().trim();
+      let responseText = response.text().trim();
 
-      // Clean up the response (remove markdown code blocks if present)
-      svgContent = svgContent
-        .replace(/```svg\n?/g, "")
-        .replace(/```xml\n?/g, "")
-        .replace(/```\n?/g, "")
-        .trim();
-
-      // Validate that it's actual SVG
-      if (!svgContent.includes("<svg")) {
+      if (!responseText) {
         return NextResponse.json(
-          { error: "Generated content is not valid SVG" },
+          { error: "No response from Gemini" },
           { status: 500 },
         );
       }
 
-      return NextResponse.json({ svg: svgContent });
+      // Clean up the response - remove markdown code blocks if present
+      responseText = responseText
+        .replace(/```json\n?/g, "")
+        .replace(/```\n?/g, "")
+        .trim();
+
+      // Parse and validate JSON
+      let diagramData;
+      try {
+        diagramData = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error("JSON parse error:", parseError);
+        console.error("Response text:", responseText);
+        return NextResponse.json(
+          { error: "Invalid JSON response from AI" },
+          { status: 500 },
+        );
+      }
+
+      if (!diagramData.shapes || !Array.isArray(diagramData.shapes)) {
+        return NextResponse.json(
+          { error: "Invalid diagram structure returned" },
+          { status: 500 },
+        );
+      }
+
+      return NextResponse.json({ diagram: diagramData });
     } catch (error: any) {
       console.error("Gemini API Error:", error);
 
@@ -95,7 +138,7 @@ CRITICAL RULES:
       throw error;
     }
   } catch (error) {
-    console.error("Error generating SVG:", error);
+    console.error("Error generating diagram:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 },
@@ -103,9 +146,7 @@ CRITICAL RULES:
   }
 }
 
-/* 
-ALTERNATIVE IMPLEMENTATION FOR ANTHROPIC CLAUDE:
-
+/*
 import Anthropic from "@anthropic-ai/sdk";
 
 export async function POST(request: Request) {

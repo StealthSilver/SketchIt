@@ -6,10 +6,25 @@ import { X, Sparkles, Loader2 } from "lucide-react";
 interface AIDrawerProps {
   isOpen: boolean;
   onClose: () => void;
-  onSVGGenerated: (svg: string) => void;
+  onDiagramGenerated: (shapes: DiagramShape[]) => void;
 }
 
-export function AIDrawer({ isOpen, onClose, onSVGGenerated }: AIDrawerProps) {
+interface DiagramShape {
+  id: string;
+  type: "square" | "rectangle" | "circle";
+  width?: number;
+  height?: number;
+  size?: number;
+  radius?: number;
+  bottomLeft?: { x: number; y: number };
+  center?: { x: number; y: number };
+}
+
+export function AIDrawer({
+  isOpen,
+  onClose,
+  onDiagramGenerated,
+}: AIDrawerProps) {
   const [prompt, setPrompt] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState("");
@@ -69,11 +84,12 @@ export function AIDrawer({ isOpen, onClose, onSVGGenerated }: AIDrawerProps) {
             "Rate limit exceeded. Please wait a moment and try again.";
           throw new Error(retryMessage);
         }
-        throw new Error(data.error || "Failed to generate SVG");
+        throw new Error(data.error || "Failed to generate diagram");
       }
 
-      if (data.svg) {
-        onSVGGenerated(data.svg);
+      if (data.diagram && data.diagram.shapes) {
+        // Pass the shapes to the canvas to draw
+        onDiagramGenerated(data.diagram.shapes);
         setPrompt("");
         setRetryCount(0);
         onClose();
@@ -157,7 +173,7 @@ export function AIDrawer({ isOpen, onClose, onSVGGenerated }: AIDrawerProps) {
                   className="text-xs"
                   style={{ color: "rgba(251, 191, 36, 0.6)" }}
                 >
-                  Create diagrams with AI
+                  Create simple diagrams with AI
                 </p>
               </div>
             </div>
@@ -180,14 +196,14 @@ export function AIDrawer({ isOpen, onClose, onSVGGenerated }: AIDrawerProps) {
                   className="block text-sm font-medium mb-3"
                   style={{ color: "#fbbf24" }}
                 >
-                  Describe your diagram
+                  Describe what you want to draw
                 </label>
                 <textarea
                   id="prompt"
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
                   onKeyPress={handleKeyPress}
-                  placeholder="E.g., A flowchart showing user authentication, A network architecture diagram, A mind map about project planning..."
+                  placeholder="E.g., house, car, robot, tree, computer, person..."
                   className="w-full h-32 px-4 py-3 rounded-lg border resize-none transition-all focus:outline-none focus:ring-2"
                   style={{
                     background: "rgba(255, 255, 255, 0.03)",
@@ -259,27 +275,23 @@ export function AIDrawer({ isOpen, onClose, onSVGGenerated }: AIDrawerProps) {
                   Quick Examples
                 </h3>
                 <div className="space-y-2">
-                  {[
-                    "A simple flowchart with 3 steps",
-                    "A mind map about project planning",
-                    "A network diagram with servers",
-                    "An organizational chart",
-                    "A timeline of project milestones",
-                  ].map((example, index) => (
-                    <button
-                      key={index}
-                      onClick={() => setPrompt(example)}
-                      disabled={isGenerating}
-                      className="w-full text-left px-4 py-2.5 rounded-lg text-sm transition-all hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed border"
-                      style={{
-                        background: "rgba(255, 255, 255, 0.03)",
-                        borderColor: "rgba(251, 191, 36, 0.15)",
-                        color: "#ededed",
-                      }}
-                    >
-                      {example}
-                    </button>
-                  ))}
+                  {["house", "car", "robot", "tree", "computer"].map(
+                    (example, index) => (
+                      <button
+                        key={index}
+                        onClick={() => setPrompt(example)}
+                        disabled={isGenerating}
+                        className="w-full text-left px-4 py-2.5 rounded-lg text-sm transition-all hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed border"
+                        style={{
+                          background: "rgba(255, 255, 255, 0.03)",
+                          borderColor: "rgba(251, 191, 36, 0.15)",
+                          color: "#ededed",
+                        }}
+                      >
+                        {example}
+                      </button>
+                    ),
+                  )}
                 </div>
               </div>
             </div>
