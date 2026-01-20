@@ -48,12 +48,21 @@ export function InfiniteCanvas() {
     end: Point;
   } | null>(null);
   const [clipboard, setClipboard] = useState<DrawingLine[]>([]);
+  const [selectedShapeIndex, setSelectedShapeIndex] = useState<number | null>(
+    null,
+  );
+  const [isDraggingShape, setIsDraggingShape] = useState(false);
+  const [isResizingShape, setIsResizingShape] = useState(false);
+  const [resizeHandle, setResizeHandle] = useState<string | null>(null);
+  const [dragStartPoint, setDragStartPoint] = useState<Point | null>(null);
+  const [originalShapePoints, setOriginalShapePoints] = useState<Point[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAIDrawerOpen, setIsAIDrawerOpen] = useState(false);
   const [lineColor, setLineColor] = useState("#ffffff"); // Default white color
   const [lineWidth, setLineWidth] = useState(2); // Default line width
   const [strokePattern, setStrokePattern] = useState<StrokePattern>("solid"); // Default stroke pattern
   const [fillColor, setFillColor] = useState("transparent"); // Default fill color (none)
+  const [cursorStyle, setCursorStyle] = useState("crosshair");
   const userId = "default-user"; // Can be replaced with actual user ID from auth
 
   // Load canvas data from database on mount
@@ -140,6 +149,204 @@ export function InfiniteCanvas() {
       };
     },
     [scale, offset],
+  );
+
+  // Get resize handles for a shape
+  const getResizeHandles = useCallback((line: DrawingLine) => {
+    if (line.points.length < 2) return [];
+    const shape = line.shape || "pen";
+    const start = line.points[0];
+    const end = line.points[line.points.length - 1];
+
+    if (shape === "pen") {
+      const xs = line.points.map((p) => p.x);
+      const ys = line.points.map((p) => p.y);
+      const minX = Math.min(...xs);
+      const maxX = Math.max(...xs);
+      const minY = Math.min(...ys);
+      const maxY = Math.max(...ys);
+      return [
+        { name: "nw", x: minX, y: minY },
+        { name: "ne", x: maxX, y: minY },
+        { name: "sw", x: minX, y: maxY },
+        { name: "se", x: maxX, y: maxY },
+      ];
+    }
+
+    const minX = Math.min(start.x, end.x);
+    const maxX = Math.max(start.x, end.x);
+    const minY = Math.min(start.y, end.y);
+    const maxY = Math.max(start.y, end.y);
+
+    if (shape === "line" || shape === "arrow") {
+      return [
+        { name: "start", x: start.x, y: start.y },
+        { name: "end", x: end.x, y: end.y },
+      ];
+    }
+
+    if (shape === "circle") {
+      const radius = Math.sqrt(
+        Math.pow(end.x - start.x, 2) + Math.pow(end.y - start.y, 2),
+      );
+      return [
+        { name: "n", x: start.x, y: start.y - radius },
+        { name: "e", x: start.x + radius, y: start.y },
+        { name: "s", x: start.x, y: start.y + radius },
+        { name: "w", x: start.x - radius, y: start.y },
+      ];
+    }
+
+    // For square and triangle
+    return [
+      { name: "nw", x: minX, y: minY },
+      { name: "ne", x: maxX, y: minY },
+      { name: "sw", x: minX, y: maxY },
+      { name: "se", x: maxX, y: maxY },
+    ];
+  }, []);
+
+  // Check if point is near a resize handle
+  const getHandleAtPoint = useCallback(
+    (point: Point, line: DrawingLine) => {
+      const handles = getResizeHandles(line);
+      const handleSize = 8 / scale;
+      for (const handle of handles) {
+        const dist = Math.sqrt(
+          Math.pow(point.x - handle.x, 2) + Math.pow(point.y - handle.y, 2),
+        );
+        if (dist < handleSize) {
+          return handle.name;
+        }
+      }
+      return null;
+    },
+    [scale, getResizeHandles],
+  );
+
+  // Resize shape based on handle
+  const resizeShape = useCallback(
+    (
+      line: DrawingLine,
+      handleName: string,
+      newPoint: Point,
+      originalPoints: Point[],
+    ) => {
+      const shape = line.shape || "pen";
+
+      if (shape === "pen") {
+        // For pen, scale all points
+        const xs = originalPoints.map((p) => p.x);
+        const ys = originalPoints.map((p) => p.y);
+        const minX = Math.min(...xs);
+        const maxX = Math.max(...xs);
+        const minY = Math.min(...ys);
+        const maxY = Math.max(...ys);
+        const origWidth = maxX - minX;
+        const origHeight = maxY - minY;
+
+        let newMinX = minX,
+          newMaxX = maxX,
+          newMinY = minY,
+          newMaxY = maxY;
+
+        if (handleName === "nw") {
+          newMinX = newPoint.x;
+          newMinY = newPoint.y;
+        } else if (handleName === "ne") {
+          newMaxX = newPoint.x;
+          newMinY = newPoint.y;
+        } else if (handleName === "sw") {
+          newMinX = newPoint.x;
+          newMaxY = newPoint.y;
+        } else if (handleName === "se") {
+          newMaxX = newPoint.x;
+          newMaxY = newPoint.y;
+        }
+
+        const newWidth = newMaxX - newMinX;
+        const newHeight = newMaxY - newMinY;
+        const scaleX = origWidth !== 0 ? newWidth / origWidth : 1;
+        const scaleY = origHeight !== 0 ? newHeight / origHeight : 1;
+
+        return originalPoints.map((p) => ({
+          x: newMinX + (p.x - minX) * scaleX,
+          y: newMinY + (p.y - minY) * scaleY,
+        }));
+      }
+
+      if (originalPoints.length < 2) return originalPoints;
+      const origStart = originalPoints[0];
+      const origEnd = originalPoints[originalPoints.length - 1];
+
+      if (shape === "line" || shape === "arrow") {
+        if (handleName === "start") {
+          return [newPoint, origEnd];
+        } else if (handleName === "end") {
+          return [origStart, newPoint];
+        }
+      }
+
+      if (shape === "circle") {
+        const newRadius = Math.sqrt(
+          Math.pow(newPoint.x - origStart.x, 2) +
+            Math.pow(newPoint.y - origStart.y, 2),
+        );
+        let angle = 0;
+        if (handleName === "n") angle = -Math.PI / 2;
+        else if (handleName === "e") angle = 0;
+        else if (handleName === "s") angle = Math.PI / 2;
+        else if (handleName === "w") angle = Math.PI;
+
+        return [
+          origStart,
+          {
+            x: origStart.x + newRadius * Math.cos(angle),
+            y: origStart.y + newRadius * Math.sin(angle),
+          },
+        ];
+      }
+
+      // For square and triangle
+      const origMinX = Math.min(origStart.x, origEnd.x);
+      const origMaxX = Math.max(origStart.x, origEnd.x);
+      const origMinY = Math.min(origStart.y, origEnd.y);
+      const origMaxY = Math.max(origStart.y, origEnd.y);
+
+      let newMinX = origMinX,
+        newMaxX = origMaxX,
+        newMinY = origMinY,
+        newMaxY = origMaxY;
+
+      if (handleName === "nw") {
+        newMinX = newPoint.x;
+        newMinY = newPoint.y;
+      } else if (handleName === "ne") {
+        newMaxX = newPoint.x;
+        newMinY = newPoint.y;
+      } else if (handleName === "sw") {
+        newMinX = newPoint.x;
+        newMaxY = newPoint.y;
+      } else if (handleName === "se") {
+        newMaxX = newPoint.x;
+        newMaxY = newPoint.y;
+      }
+
+      // Maintain the original orientation
+      const startWasMin = origStart.x <= origEnd.x && origStart.y <= origEnd.y;
+      if (startWasMin) {
+        return [
+          { x: newMinX, y: newMinY },
+          { x: newMaxX, y: newMaxY },
+        ];
+      } else {
+        return [
+          { x: newMaxX, y: newMaxY },
+          { x: newMinX, y: newMinY },
+        ];
+      }
+    },
+    [],
   );
 
   // Check if a point is inside a shape's bounding box
@@ -514,8 +721,72 @@ export function InfiniteCanvas() {
         img.src = url;
       }
     });
-    // Draw selection highlights
-    if (selectedShapes.size > 0) {
+    // Draw selection highlights and resize handles
+    if (selectedShapeIndex !== null && selectedShapeIndex < lines.length) {
+      const line = lines[selectedShapeIndex];
+      if (line && line.points.length >= 1) {
+        const shape = line.shape || "pen";
+        ctx.strokeStyle = "rgba(59, 130, 246, 0.8)"; // Blue highlight
+        ctx.lineWidth = 2 / scale;
+        ctx.setLineDash([5 / scale, 5 / scale]);
+
+        if (shape === "pen") {
+          // Draw bounding box for pen strokes
+          const xs = line.points.map((p) => p.x);
+          const ys = line.points.map((p) => p.y);
+          const minX = Math.min(...xs);
+          const maxX = Math.max(...xs);
+          const minY = Math.min(...ys);
+          const maxY = Math.max(...ys);
+          const padding = 5 / scale;
+          ctx.strokeRect(
+            minX - padding,
+            minY - padding,
+            maxX - minX + padding * 2,
+            maxY - minY + padding * 2,
+          );
+        } else if (line.points.length >= 2) {
+          const start = line.points[0];
+          const end = line.points[line.points.length - 1];
+          const minX = Math.min(start.x, end.x);
+          const maxX = Math.max(start.x, end.x);
+          const minY = Math.min(start.y, end.y);
+          const maxY = Math.max(start.y, end.y);
+          const padding = 5 / scale;
+          ctx.strokeRect(
+            minX - padding,
+            minY - padding,
+            maxX - minX + padding * 2,
+            maxY - minY + padding * 2,
+          );
+        }
+        ctx.setLineDash([]);
+
+        // Draw resize handles
+        const handles = getResizeHandles(line);
+        handles.forEach((handle) => {
+          const handleSize = 8 / scale;
+          ctx.fillStyle = "rgba(59, 130, 246, 1)";
+          ctx.strokeStyle = "#ffffff";
+          ctx.lineWidth = 2 / scale;
+          ctx.fillRect(
+            handle.x - handleSize / 2,
+            handle.y - handleSize / 2,
+            handleSize,
+            handleSize,
+          );
+          ctx.strokeRect(
+            handle.x - handleSize / 2,
+            handle.y - handleSize / 2,
+            handleSize,
+            handleSize,
+          );
+        });
+      }
+    }
+
+    // Draw selection highlights for multi-select (old behavior)
+    if (selectedShapes.size > 0 && selectedShapeIndex === null) {
       selectedShapes.forEach((index) => {
         const line = lines[index];
         if (!line || line.points.length < 1) return;
@@ -675,9 +946,11 @@ export function InfiniteCanvas() {
     offset,
     selectedShape,
     selectedShapes,
+    selectedShapeIndex,
     selectionBox,
     applyStrokePattern,
     strokePattern,
+    getResizeHandles,
   ]);
 
   // Handle canvas resize
@@ -732,52 +1005,113 @@ export function InfiniteCanvas() {
       // Selection mode
       const point = screenToCanvas(e.clientX, e.clientY);
 
-      // Check if clicking on an already selected shape
-      let clickedSelected = false;
-      for (const index of selectedShapes) {
-        if (isPointInShape(point, lines[index])) {
-          clickedSelected = true;
+      // Check if clicking on resize handle of selected shape
+      if (selectedShapeIndex !== null && selectedShapeIndex < lines.length) {
+        const handle = getHandleAtPoint(point, lines[selectedShapeIndex]);
+        if (handle) {
+          setIsResizingShape(true);
+          setResizeHandle(handle);
+          setDragStartPoint(point);
+          setOriginalShapePoints([...lines[selectedShapeIndex].points]);
+          return;
+        }
+
+        // Check if clicking on the selected shape to drag it
+        if (isPointInShape(point, lines[selectedShapeIndex])) {
+          setIsDraggingShape(true);
+          setDragStartPoint(point);
+          setOriginalShapePoints([...lines[selectedShapeIndex].points]);
+          return;
+        }
+      }
+
+      // Check if clicking on a new shape
+      let foundShape = false;
+      for (let i = lines.length - 1; i >= 0; i--) {
+        if (isPointInShape(point, lines[i])) {
+          setSelectedShapeIndex(i);
+          setSelectedShapes(new Set());
+          setIsDraggingShape(true);
+          setDragStartPoint(point);
+          setOriginalShapePoints([...lines[i].points]);
+          foundShape = true;
           break;
         }
       }
 
-      if (clickedSelected) {
-        // Keep selection and prepare for potential drag
-        setIsDrawing(false);
-      } else {
-        // Check if clicking on a new shape
-        let foundShape = false;
-        for (let i = lines.length - 1; i >= 0; i--) {
-          if (isPointInShape(point, lines[i])) {
-            setSelectedShapes(new Set([i]));
-            foundShape = true;
-            break;
-          }
-        }
-
-        if (!foundShape) {
-          // Start selection box
-          setSelectedShapes(new Set());
-          setSelectionBox({ start: point, end: point });
-          setIsDrawing(true);
-        }
+      if (!foundShape) {
+        // Start selection box or deselect
+        setSelectedShapeIndex(null);
+        setSelectedShapes(new Set());
+        setSelectionBox({ start: point, end: point });
+        setIsDrawing(true);
       }
     } else {
       // Left mouse button - draw mode
       setIsDrawing(true);
       const point = screenToCanvas(e.clientX, e.clientY);
       setCurrentLine([point]);
+      // Clear selection when starting to draw
+      setSelectedShapeIndex(null);
+      setSelectedShapes(new Set());
     }
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const point = screenToCanvas(e.clientX, e.clientY);
+
     if (isPanning) {
+      setCursorStyle("grabbing");
       const dx = e.clientX - lastPanPoint.x;
       const dy = e.clientY - lastPanPoint.y;
       setOffset((prev) => ({ x: prev.x + dx, y: prev.y + dy }));
       setLastPanPoint({ x: e.clientX, y: e.clientY });
+    } else if (
+      isResizingShape &&
+      selectedShapeIndex !== null &&
+      dragStartPoint &&
+      resizeHandle
+    ) {
+      // Resizing shape - cursor is already set in mouse down
+      const newPoints = resizeShape(
+        lines[selectedShapeIndex],
+        resizeHandle,
+        point,
+        originalShapePoints,
+      );
+
+      setLines((prev) => {
+        const newLines = [...prev];
+        newLines[selectedShapeIndex] = {
+          ...newLines[selectedShapeIndex],
+          points: newPoints,
+        };
+        return newLines;
+      });
+    } else if (
+      isDraggingShape &&
+      selectedShapeIndex !== null &&
+      dragStartPoint
+    ) {
+      // Dragging shape
+      setCursorStyle("move");
+      const dx = point.x - dragStartPoint.x;
+      const dy = point.y - dragStartPoint.y;
+
+      const newPoints = originalShapePoints.map((p) => ({
+        x: p.x + dx,
+        y: p.y + dy,
+      }));
+
+      setLines((prev) => {
+        const newLines = [...prev];
+        newLines[selectedShapeIndex] = {
+          ...newLines[selectedShapeIndex],
+          points: newPoints,
+        };
+        return newLines;
+      });
     } else if (isDrawing) {
-      const point = screenToCanvas(e.clientX, e.clientY);
       if (selectedShape === "select" && selectionBox) {
         // Update selection box
         setSelectionBox((prev) => (prev ? { ...prev, end: point } : null));
@@ -795,12 +1129,63 @@ export function InfiniteCanvas() {
         // For shapes, just update the end point
         setCurrentLine((prev) => [prev[0], point]);
       }
+    } else {
+      // Update cursor based on hover state
+      if (
+        selectedShape === "select" &&
+        selectedShapeIndex !== null &&
+        selectedShapeIndex < lines.length
+      ) {
+        // Check if hovering over a resize handle
+        const handle = getHandleAtPoint(point, lines[selectedShapeIndex]);
+        if (handle) {
+          // Set cursor based on handle position
+          if (handle === "nw" || handle === "se") {
+            setCursorStyle("nwse-resize");
+          } else if (handle === "ne" || handle === "sw") {
+            setCursorStyle("nesw-resize");
+          } else if (handle === "n" || handle === "s") {
+            setCursorStyle("ns-resize");
+          } else if (handle === "e" || handle === "w") {
+            setCursorStyle("ew-resize");
+          } else if (handle === "start" || handle === "end") {
+            setCursorStyle("move");
+          }
+        } else if (isPointInShape(point, lines[selectedShapeIndex])) {
+          setCursorStyle("move");
+        } else {
+          setCursorStyle("default");
+        }
+      } else if (selectedShape === "select") {
+        setCursorStyle("default");
+      } else if (
+        selectedShape === "pen" ||
+        selectedShape === "line" ||
+        selectedShape === "arrow" ||
+        selectedShape === "square" ||
+        selectedShape === "circle" ||
+        selectedShape === "triangle"
+      ) {
+        setCursorStyle("crosshair");
+      }
     }
   };
 
   const handlePointerUp = () => {
     if (isPanning) {
       setIsPanning(false);
+      setCursorStyle(selectedShape === "select" ? "default" : "crosshair");
+    } else if (isResizingShape) {
+      setIsResizingShape(false);
+      setResizeHandle(null);
+      setDragStartPoint(null);
+      setOriginalShapePoints([]);
+      setCursorStyle("default");
+    } else if (isDraggingShape) {
+      setIsDraggingShape(false);
+      setDragStartPoint(null);
+      setOriginalShapePoints([]);
+      setCursorStyle("default");
     } else if (isDrawing) {
       setIsDrawing(false);
 
@@ -902,12 +1287,21 @@ export function InfiniteCanvas() {
       }
 
       // Selection tool shortcuts
-      if (selectedShape === "select" && selectedShapes.size > 0) {
+      if (
+        selectedShape === "select" &&
+        (selectedShapeIndex !== null || selectedShapes.size > 0)
+      ) {
         // Cmd/Ctrl + C to copy
         if ((e.metaKey || e.ctrlKey) && e.key === "c") {
           e.preventDefault();
-          const shapesToCopy = Array.from(selectedShapes).map((i) => lines[i]);
-          setClipboard(shapesToCopy);
+          if (selectedShapeIndex !== null) {
+            setClipboard([lines[selectedShapeIndex]]);
+          } else {
+            const shapesToCopy = Array.from(selectedShapes).map(
+              (i) => lines[i],
+            );
+            setClipboard(shapesToCopy);
+          }
         }
 
         // Cmd/Ctrl + V to paste
@@ -926,29 +1320,45 @@ export function InfiniteCanvas() {
             const startIndex = lines.length;
             setLines((prev) => [...prev, ...pastedShapes]);
 
-            // Select the newly pasted shapes
-            const newSelection = new Set<number>();
-            for (let i = 0; i < pastedShapes.length; i++) {
-              newSelection.add(startIndex + i);
+            // Select the newly pasted shape
+            if (pastedShapes.length === 1) {
+              setSelectedShapeIndex(startIndex);
+              setSelectedShapes(new Set());
+            } else {
+              // Select the newly pasted shapes
+              const newSelection = new Set<number>();
+              for (let i = 0; i < pastedShapes.length; i++) {
+                newSelection.add(startIndex + i);
+              }
+              setSelectedShapes(newSelection);
+              setSelectedShapeIndex(null);
             }
-            setSelectedShapes(newSelection);
           }
         }
 
         // Delete or Backspace to delete selected shapes
         if (e.key === "Delete" || e.key === "Backspace") {
           e.preventDefault();
-          const indicesToDelete = Array.from(selectedShapes).sort(
-            (a, b) => b - a,
-          );
-          setLines((prev) => {
-            const newLines = [...prev];
-            indicesToDelete.forEach((index) => {
-              newLines.splice(index, 1);
+          if (selectedShapeIndex !== null) {
+            setLines((prev) => {
+              const newLines = [...prev];
+              newLines.splice(selectedShapeIndex, 1);
+              return newLines;
             });
-            return newLines;
-          });
-          setSelectedShapes(new Set());
+            setSelectedShapeIndex(null);
+          } else {
+            const indicesToDelete = Array.from(selectedShapes).sort(
+              (a, b) => b - a,
+            );
+            setLines((prev) => {
+              const newLines = [...prev];
+              indicesToDelete.forEach((index) => {
+                newLines.splice(index, 1);
+              });
+              return newLines;
+            });
+            setSelectedShapes(new Set());
+          }
         }
       }
 
@@ -974,7 +1384,14 @@ export function InfiniteCanvas() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedShape, selectedShapes, clipboard, lines, scale]);
+  }, [
+    selectedShape,
+    selectedShapes,
+    selectedShapeIndex,
+    clipboard,
+    lines,
+    scale,
+  ]);
 
   // Handle AI-generated SVG
   interface DiagramShape {
@@ -1154,9 +1571,7 @@ export function InfiniteCanvas() {
           cursor:
             selectedShape === "eraser"
               ? 'url(\'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><circle cx="16" cy="16" r="10" fill="none" stroke="%23fbbf24" stroke-width="2"/></svg>\') 16 16, auto'
-              : selectedShape === "select"
-                ? "default"
-                : "crosshair",
+              : cursorStyle,
         }}
       />
 

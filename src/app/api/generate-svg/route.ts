@@ -90,7 +90,7 @@ export async function POST(request: Request) {
 
 CRITICAL RULES:
 1. Return ONLY valid JSON - no markdown, no code blocks, no explanations
-2. Use ONLY these shape types: "square", "rectangle", "circle"
+2. Use ONLY these shape types: "square", "rectangle", "circle", "triangle
 3. For squares: use "size" and "bottomLeft" coordinates
 4. For rectangles: use "width", "height", and "bottomLeft" coordinates
 5. For circles: use "radius" and "center" coordinates
@@ -103,7 +103,7 @@ Return format:
   "shapes": [
     {
       "id": "unique_id",
-      "type": "rectangle" | "square" | "circle",
+      "type": "rectangle" | "square" | "circle" | "triangle, 
       "width": number (for rectangle),
       "height": number (for rectangle),
       "size": number (for square),
